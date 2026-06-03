@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '../lib/auth.js';
 import { DATA, contactByCompany, placementFor } from '../lib/data.js';
+import { loadLogs, loadTone } from '../lib/log.js';
 
 const MODEL = process.env.CLAUDE_MODEL || 'claude-opus-4-8';
 
@@ -34,6 +35,8 @@ Sådan svarer du ALTID:
 - Tag udgangspunkt i netop denne kundes branche, segment-status og den anbefalede placering.
 - Brug "late sale"-vinklen (rabat ift. listepris) og synlighed/eksponering som løftestang, når det giver mening.
 - Vær ærlig om realistiske indvendinger og hvordan de håndteres.
+- Hvis du får eksempler på Sebastians egne tidligere beskeder, så MATCH hans tone, ordvalg, længde og signatur. Han skriver varmt, direkte og uformelt.
+- Hvis du får en hidtidig dialog inkl. kundens svar, så tag højde for den og foreslå konkret, hvad Sebastian skal svare nu.
 
 Svar i præcis dette format (brug Markdown):
 
@@ -47,7 +50,7 @@ Svar i præcis dette format (brug Markdown):
 
 **Mulig indvending:** <den mest sandsynlige indvending> → <kort svar på den>
 
-**Forslag til næste linje:** "<én sætning Sebastian kan sende/sige>"`;
+**Forslag til svar:** "<en færdig besked Sebastian kan sende — matcher hans tone; svarer direkte på kundens seneste svar hvis der er et>"`;
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return;
@@ -73,6 +76,16 @@ export default async function handler(req, res) {
   const status = body.status || 'Ikke kontaktet';
   const daysSince = Number.isFinite(body.daysSince) ? body.daysSince : null;
 
+  // Learning context: this contact's dialogue + Sebastian's tone examples.
+  const [logs, tone] = await Promise.all([loadLogs(), loadTone()]);
+  const dialogue = (logs[company] || [])
+    .map((e) => `${e.who === 'kunde' ? 'Kunde' : 'Sebastian'}: ${e.text}`)
+    .join('\n');
+  const toneExamples = tone
+    .slice(-6)
+    .map((e, i) => `${i + 1}. ${e.text}`)
+    .join('\n\n');
+
   const userMsg = [
     `Kunde: ${contact.company}`,
     `Temperatur: ${contact.temp === 'varm' ? 'varm (har haft kontakt før)' : 'kold'}`,
@@ -92,6 +105,8 @@ export default async function handler(req, res) {
       : null,
     `Nuværende status: ${status}`,
     daysSince != null ? `Sendt for ${daysSince} dage siden uden svar.` : null,
+    dialogue ? `\nHidtidig dialog:\n${dialogue}` : null,
+    toneExamples ? `\nSebastians egne tidligere beskeder (match denne tone):\n${toneExamples}` : null,
     '',
     'Giv mig konkrete forslag til at vinde denne kunde.',
   ]

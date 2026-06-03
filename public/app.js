@@ -8,6 +8,7 @@ const STATUSES = ['Ikke kontaktet','Sendt','Opfølgning sendt','Svar modtaget','
 
 let DATA = { contacts: [], placements: {}, followupDaysDefault: 5 };
 let STATE = {};            // { company: {status, date, note} }
+let LOGS = {};             // { company: [{who, text, ts}] }
 let HAS_AI = false;
 let curTab = 'kold';
 
@@ -122,7 +123,12 @@ function contactsForTab(){
   if(curTab === 'opfolg') return DATA.contacts.filter(isDue).sort((a,b)=>daysSince(rec(b.company).date)-daysSince(rec(a.company).date));
   return DATA.contacts.filter(c => c.temp === curTab).sort((a,b)=>a.order-b.order);
 }
-function tipsHTML(c){
+function logEntriesHTML(company){
+  const entries = LOGS[company] || [];
+  if(!entries.length) return '<div class="logempty">Ingen dialog gemt endnu.</div>';
+  return entries.map(e=>`<div class="logmsg ${e.who==='kunde'?'fromkunde':'frommig'}"><span class="logwho">${e.who==='kunde'?'Kunde':'Mig'}</span>${esc(e.text)}</div>`).join('');
+}
+function winboxHTML(c){
   const tips = ruleTips(c);
   const aiBtn = HAS_AI
     ? `<button class="btn small act-ai">🤖 Spørg Claude</button>`
@@ -132,6 +138,15 @@ function tipsHTML(c){
     <div class="winangle">${esc(angleFor(c))}</div>
     <ul class="wintips">${tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>
     <div class="ai-out" style="display:none"></div>
+    <div class="logbox">
+      <div class="logtitle">💬 Dialog &amp; læring</div>
+      <div class="logentries">${logEntriesHTML(c.company)}</div>
+      <textarea class="loginput" placeholder="Indsæt kundens svar — eller dit eget svar. Dine egne svar lærer Claude din tone."></textarea>
+      <div class="logbtns">
+        <button class="btn small act-log-mig">Gem mit svar</button>
+        <button class="btn small act-log-kunde">Gem kundens svar</button>
+      </div>
+    </div>
   </div>`;
 }
 function cardHTML(c){
@@ -154,9 +169,10 @@ function cardHTML(c){
       <button class="btn act-copy" data-fu="${isFu?1:0}">${copyLabel}</button>
       <select class="st">${opts}</select>
       ${isFu ? '' : '<input class="note" placeholder="Note…" value="'+esc(r.note||'')+'">'}
+      <button class="btn small act-win">🎯 ${isFu?'Skjul hjælp':'Vind kunden'}</button>
       <span class="when">${r.date ? '· '+r.date : ''}</span>
     </div>
-    ${isFu ? tipsHTML(c) : ''}
+    <div class="winwrap"${isFu?'':' style="display:none"'}>${winboxHTML(c)}</div>
   </div>`;
 }
 function render(){
@@ -194,6 +210,28 @@ function bindCards(){
     });
     const ai = el('.act-ai', card);
     if(ai) ai.addEventListener('click', ()=>askClaude(company, card, ai));
+
+    const win = el('.act-win', card);
+    if(win) win.addEventListener('click', ()=>{
+      const wrap = el('.winwrap', card);
+      const open = wrap.style.display === 'none';
+      wrap.style.display = open ? '' : 'none';
+      win.textContent = open ? '🎯 Skjul hjælp' : (curTab==='opfolg' ? '🎯 Skjul hjælp' : '🎯 Vind kunden');
+    });
+
+    const saveLog = (who) => {
+      const ta = el('.loginput', card);
+      const text = (ta.value || '').trim();
+      if(!text) return;
+      api('/api/log', { method:'POST', body: JSON.stringify({ company, who, text }) })
+        .then(async res=>{
+          if(res.status === 401){ showGate(); return; }
+          const j = await res.json();
+          if(j.ok){ LOGS[company] = j.entries; el('.logentries', card).innerHTML = logEntriesHTML(company); ta.value=''; }
+        }).catch(e=>console.error('log failed', e));
+    };
+    const bm = el('.act-log-mig', card);   if(bm) bm.addEventListener('click', ()=>saveLog('mig'));
+    const bk = el('.act-log-kunde', card); if(bk) bk.addEventListener('click', ()=>saveLog('kunde'));
   });
 }
 
@@ -317,6 +355,7 @@ async function loadData(){
   const d = await res.json();
   DATA = { contacts:d.contacts, placements:d.placements||{}, followupDaysDefault:d.followupDaysDefault||5 };
   STATE = d.state || {};
+  LOGS = d.logs || {};
   HAS_AI = !!d.hasAI;
   if(DATA.followupDaysDefault) $('thr').value = DATA.followupDaysDefault;
   return true;

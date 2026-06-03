@@ -1,11 +1,12 @@
 import { requireAuth } from '../lib/auth.js';
 import { DATA } from '../lib/data.js';
 import { effectiveState } from '../lib/state.js';
+import { loadLogs } from '../lib/log.js';
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return;
   try {
-    const state = await effectiveState();
+    const [state, logs] = await Promise.all([effectiveState(), loadLogs()]);
     return res.status(200).json({
       contacts: DATA.contacts,
       placements: DATA.placements || {},
@@ -13,6 +14,7 @@ export default async function handler(req, res) {
       generated: DATA.generated || null,
       hasAI: Boolean(process.env.ANTHROPIC_API_KEY),
       state,
+      logs,
     });
   } catch (err) {
     console.error('data error', err);
