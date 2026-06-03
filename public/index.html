@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hyde Media — Outreach</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Login gate -->
+  <div id="gate" class="gate" style="display:none">
+    <form class="gatebox" id="loginForm">
+      <h1>Hyde Media — Outreach</h1>
+      <p>Indtast adgangskode for at fortsætte.</p>
+      <input id="pw" type="password" placeholder="Adgangskode" autocomplete="current-password">
+      <button class="hbtn" type="submit">Log ind</button>
+      <div id="loginErr" class="loginerr"></div>
+    </form>
+  </div>
+
+  <!-- App -->
+  <div id="app" style="display:none">
+    <header>
+      <div class="wrap">
+        <h1>Hyde Media — Outreach</h1>
+        <p>Kopiér → indsæt i Gmail. Status gemmes nu i skyen og deles på tværs af dine enheder. Opfølgninger dukker op efter X dage.</p>
+        <div class="hbtns">
+          <button class="hbtn" id="btnExport">📥 Eksportér status (CSV)</button>
+          <button class="hbtn" id="btnSummary">📋 Kopiér opsummering</button>
+          <label>Opfølgning efter <input id="thr" type="number" value="5" min="1"> dage</label>
+          <button class="hbtn" id="btnReset">↺ Nulstil</button>
+          <button class="hbtn" id="btnLogout">Log ud</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div class="tabs">
+        <button class="tab active" data-tab="kold">🔵 Kolde <span class="tabcount" id="c-kold"></span></button>
+        <button class="tab" data-tab="varm">🔥 Varme <span class="tabcount" id="c-varm"></span></button>
+        <button class="tab" data-tab="opfolg">⏰ Opfølgning <span class="tabcount" id="c-opfolg"></span></button>
+      </div>
+
+      <div class="bar" id="bar"></div>
+
+      <div class="controls">
+        <input id="q" placeholder="Søg kunde, emne eller type…">
+        <select id="fil">
+          <option value="">Vis alle</option>
+          <option value="Ikke kontaktet">Kun ikke-sendt</option>
+          <option value="Sendt">Kun sendt</option>
+          <option value="Opfølgning sendt">Kun opfulgt</option>
+          <option value="Svar modtaget">Kun svar</option>
+          <option value="Booket">Kun booket</option>
+          <option value="Nej tak">Kun nej tak</option>
+        </select>
+      </div>
+
+      <div id="list"></div>
+      <div id="empty" class="empty" style="display:none"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

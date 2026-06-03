@@ -1,0 +1,345 @@
+/* Hyde Media — Outreach (Vercel edition)
+ * Data + status come from the API (/api/data, /api/state). Status is stored
+ * server-side in Redis and shared across devices. The Opfølgning tab shows
+ * rule-based "win the customer" tips plus an on-demand Claude suggestion.
+ */
+
+const STATUSES = ['Ikke kontaktet','Sendt','Opfølgning sendt','Svar modtaget','Booket','Nej tak'];
+
+let DATA = { contacts: [], placements: {}, followupDaysDefault: 5 };
+let STATE = {};            // { company: {status, date, note} }
+let HAS_AI = false;
+let curTab = 'kold';
+
+const $ = (id) => document.getElementById(id);
+const el = (sel, root=document) => root.querySelector(sel);
+
+/* ---------- api ---------- */
+async function api(path, opts){
+  const res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
+  return res;
+}
+function rec(c){ return STATE[c] || {}; }
+// Optimistic local update + server persist.
+async function setRec(c, patch){
+  const next = Object.assign({}, STATE[c]);
+  for(const [k,v] of Object.entries(patch)){
+    if(v === undefined || v === null || v === '') delete next[k]; else next[k] = v;
+  }
+  STATE[c] = next;
+  try {
+    const res = await api('/api/state', { method:'POST', body: JSON.stringify({ company:c, patch }) });
+    if(res.status === 401){ showGate(); }
+  } catch(e){ console.error('save failed', e); }
+}
+
+/* ---------- dates ---------- */
+function today(){ return new Date().toLocaleDateString('da-DK'); }      // e.g. "3.6.2026"
+function parseDate(s){
+  if(!s) return null;
+  const p = s.split(/[.\-\/]/).map(Number);
+  if(p.length < 3) return null;
+  return new Date(p[2], p[1]-1, p[0]);   // day-first
+}
+function daysSince(s){ const d = parseDate(s); return d ? Math.floor((Date.now()-d)/86400000) : 0; }
+function followupDays(){ return parseInt($('thr').value) || DATA.followupDaysDefault || 5; }
+function isDue(c){
+  const r = rec(c.company);
+  return (r.status === 'Sendt' || r.status === 'Opfølgning sendt') && daysSince(r.date) >= followupDays();
+}
+
+/* ---------- helpers ---------- */
+function statusClass(st){
+  if(st === 'Booket') return 'book';
+  if(st === 'Nej tak') return 'no';
+  if(st === 'Opfølgning sendt') return 'fup';
+  if(st === 'Sendt' || st === 'Svar modtaget') return 'done';
+  return '';
+}
+function copyText(text, btn){
+  const ok = () => { const o = btn.dataset.lbl || btn.textContent; btn.dataset.lbl = o; btn.textContent='✓ Kopieret'; btn.classList.add('ok'); setTimeout(()=>{btn.textContent=o;btn.classList.remove('ok');},1200); };
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(text).then(ok).catch(()=>fallbackCopy(text, ok));
+  } else fallbackCopy(text, ok);
+}
+function fallbackCopy(text, ok){
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); ok(); } catch(e){ alert('Markér teksten og kopiér manuelt.'); }
+  document.body.removeChild(ta);
+}
+
+/* ---------- win-the-customer rules ---------- */
+function placementData(c){ return (c.placement && DATA.placements[c.placement]) || null; }
+function discountLine(c){
+  const p = placementData(c);
+  if(!p || !p.price || !p.list) return null;
+  const norm = parseInt(String(p.list).replace(/\D/g,''));
+  const now  = parseInt(String(p.price).replace(/\D/g,''));
+  if(!norm || !now || norm <= now) return `Late sale-pris ${p.price} på ${c.placement}.`;
+  const pct = Math.round((1 - now/norm) * 100);
+  return `Late sale: ${p.price} mod normalt ${p.list} (~${pct}% under listepris) på ${c.placement}.`;
+}
+// Tactic per segment/type from the CRM export.
+const SEGMENT_TACTIC = {
+  'Første kontakt': 'Hold første mail kort: én placering, ét tal (eksponeringer), én pris. Bed om et ja/nej, ikke et møde.',
+  'Følg op': 'Henvis til jeres sidste dialog og giv en ny grund til at handle nu (late sale-vinduet).',
+  'Nudge / opfølg': 'Lille, venlig nudge — tilbyd at holde pladsen et par dage, så der er en deadline.',
+  'Re-aktivér': 'Bring noget nyt: ny placering, ny pris eller ny periode — ikke bare “følger lige op”.',
+  'Genåbn': 'Anerkend pausen og åbn med en konkret anledning (sommerkampagne / late sale).',
+  'Gensend (var fraværende)': 'De var ude sidst — gensend kort og spørg om timingen passer bedre nu.',
+  'Ny kontaktperson': 'Præsentér dig kort for den nye kontakt og opsummér værdien på 2 linjer.',
+  'Nurtur (sagde nej)': 'De sagde nej før — pres ikke. Del værdi/cases og plant næste sæson.',
+  'Luk / fremryk': 'Gå efter en beslutning: tilbyd en klar deadline eller et lille incitament for at lukke nu.',
+};
+function ruleTips(c){
+  const r = rec(c.company);
+  const tips = [];
+  const seg = c.segment && SEGMENT_TACTIC[c.segment];
+  if(seg) tips.push(seg);
+  const disc = discountLine(c);
+  if(disc) tips.push(disc);
+  if(c.temp === 'varm') tips.push('Varm kontakt: referér konkret til den tidligere relation/dialog.');
+  if(r.status === 'Sendt'){
+    const d = daysSince(r.date);
+    tips.push(`Sendt for ${d} dage siden uden svar — send opfølgningen og foreslå en kort snak.`);
+  } else if(r.status === 'Opfølgning sendt'){
+    tips.push('Allerede fulgt op — prøv en anden kanal (ring/LinkedIn) eller en sidste “lukker”-mail før du parkerer.');
+  }
+  const p = placementData(c);
+  if(p && p.period) tips.push(`Skab knaphed: perioden er ${p.period} — pladsen forsvinder efter late sale-vinduet.`);
+  return tips.slice(0,5);
+}
+function angleFor(c){
+  const p = placementData(c);
+  const where = p && p.area ? `${c.placement} (${p.area})` : (c.placement || 'en stærk placering');
+  return `${c.company}: synlighed på ${where}${p && p.impr ? ` med ${p.impr} eksponeringer/uge` : ''} — i et tidsbegrænset late sale-vindue.`;
+}
+
+/* ---------- rendering ---------- */
+function contactsForTab(){
+  if(curTab === 'opfolg') return DATA.contacts.filter(isDue).sort((a,b)=>daysSince(rec(b.company).date)-daysSince(rec(a.company).date));
+  return DATA.contacts.filter(c => c.temp === curTab).sort((a,b)=>a.order-b.order);
+}
+function tipsHTML(c){
+  const tips = ruleTips(c);
+  const aiBtn = HAS_AI
+    ? `<button class="btn small act-ai">🤖 Spørg Claude</button>`
+    : `<span class="ai-off" title="Tilføj ANTHROPIC_API_KEY i Vercel">🤖 AI slået fra</span>`;
+  return `<div class="winbox">
+    <div class="wintitle">🎯 Sådan vinder du dem ${aiBtn}</div>
+    <div class="winangle">${esc(angleFor(c))}</div>
+    <ul class="wintips">${tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>
+    <div class="ai-out" style="display:none"></div>
+  </div>`;
+}
+function cardHTML(c){
+  const r = rec(c.company);
+  const st = r.status || 'Ikke kontaktet';
+  const isFu = curTab === 'opfolg';
+  const subject = isFu ? c.fuSubject : c.subject;
+  const body = isFu ? c.fuBody : c.body;
+  const badge = isFu
+    ? `<span class="badge due">sendt for ${daysSince(r.date)} dage siden</span>`
+    : `<span class="badge">${esc(c.segment)}${c.placement ? ' · '+esc(c.placement) : ''}</span>`;
+  const opts = STATUSES.map(s => `<option ${s===st?'selected':''}>${s}</option>`).join('');
+  const copyLabel = isFu ? '📋 Kopiér opfølgning' : '📋 Kopiér mail';
+  return `<div class="card ${statusClass(st)}" data-company="${esc(c.company)}">
+    <div class="chead"><span class="brand">${esc(c.company)}</span>${badge}</div>
+    <div class="subrow"><span class="sublbl">Emne</span><span class="subtxt subj">${esc(subject)}</span>
+      <button class="btn small act-copysub">Kopiér emne</button></div>
+    <div class="body">${esc(body)}</div>
+    <div class="row2">
+      <button class="btn act-copy" data-fu="${isFu?1:0}">${copyLabel}</button>
+      <select class="st">${opts}</select>
+      ${isFu ? '' : '<input class="note" placeholder="Note…" value="'+esc(r.note||'')+'">'}
+      <span class="when">${r.date ? '· '+r.date : ''}</span>
+    </div>
+    ${isFu ? tipsHTML(c) : ''}
+  </div>`;
+}
+function render(){
+  const q = $('q').value.toLowerCase();
+  const f = $('fil').value;
+  let items = contactsForTab().filter(c=>{
+    const hay = (c.company+' '+c.subject+' '+c.segment).toLowerCase();
+    const st = rec(c.company).status || 'Ikke kontaktet';
+    return hay.includes(q) && (!f || st === f);
+  });
+  $('list').innerHTML = items.map(cardHTML).join('');
+  $('empty').style.display = items.length ? 'none' : '';
+  $('empty').textContent = curTab==='opfolg' ? 'Ingen opfølgninger er forfaldne lige nu 🎉' : 'Ingen kontakter matcher.';
+  bindCards();
+  renderBar();
+}
+function bindCards(){
+  document.querySelectorAll('.card').forEach(card=>{
+    const company = card.dataset.company;
+    el('.st', card).addEventListener('change', e=>{
+      const v = e.target.value;
+      const patch = {status:v};
+      if(v !== 'Ikke kontaktet' && !rec(company).date) patch.date = today();
+      if(v === 'Ikke kontaktet') patch.date = null;
+      setRec(company, patch).then(render);
+    });
+    const note = el('.note', card);
+    if(note) note.addEventListener('change', e=>setRec(company,{note:e.target.value}));
+    el('.act-copysub', card).addEventListener('click', e=>copyText(el('.subj',card).textContent, e.target));
+    el('.act-copy', card).addEventListener('click', e=>{
+      const isFu = e.target.dataset.fu === '1';
+      copyText(el('.body',card).textContent, e.target);
+      if(isFu){ setRec(company,{status:'Opfølgning sendt', date:today()}).then(render); }
+      else { const r = rec(company); if(!r.status || r.status==='Ikke kontaktet') setRec(company,{status:'Sendt', date:today()}).then(render); }
+    });
+    const ai = el('.act-ai', card);
+    if(ai) ai.addEventListener('click', ()=>askClaude(company, card, ai));
+  });
+}
+
+/* ---------- AI suggestion ---------- */
+async function askClaude(company, card, btn){
+  const out = el('.ai-out', card);
+  const c = DATA.contacts.find(x=>x.company===company);
+  const r = rec(company);
+  out.style.display='';
+  out.innerHTML = '<span class="ai-loading">🤖 Claude tænker…</span>';
+  btn.disabled = true;
+  try {
+    const res = await api('/api/suggest', { method:'POST', body: JSON.stringify({
+      company, status: r.status || 'Ikke kontaktet',
+      daysSince: r.date ? daysSince(r.date) : null
+    })});
+    if(res.status === 401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ out.innerHTML = `<span class="ai-err">${esc(j.message || 'Kunne ikke hente forslag.')}</span>`; return; }
+    out.innerHTML = `<div class="ai-card">${mdLite(j.text)}</div>`;
+  } catch(e){
+    out.innerHTML = '<span class="ai-err">Netværksfejl.</span>';
+  } finally { btn.disabled = false; }
+}
+// very small markdown renderer (bold + bullets + line breaks)
+function mdLite(t){
+  const lines = esc(t).split(/\r?\n/);
+  let html=''; let inList=false;
+  for(let line of lines){
+    line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    if(/^\s*[-*]\s+/.test(line)){
+      if(!inList){ html+='<ul>'; inList=true; }
+      html += '<li>'+line.replace(/^\s*[-*]\s+/, '')+'</li>';
+    } else {
+      if(inList){ html+='</ul>'; inList=false; }
+      if(line.trim()==='') html+='<br>'; else html += '<p>'+line+'</p>';
+    }
+  }
+  if(inList) html+='</ul>';
+  return html;
+}
+
+/* ---------- counts / bar ---------- */
+function renderCounts(){
+  $('c-kold').textContent   = '('+DATA.contacts.filter(c=>c.temp==='kold').length+')';
+  $('c-varm').textContent   = '('+DATA.contacts.filter(c=>c.temp==='varm').length+')';
+  $('c-opfolg').textContent = '('+DATA.contacts.filter(isDue).length+')';
+}
+function renderBar(){
+  renderCounts();
+  if(curTab === 'opfolg'){
+    const n = DATA.contacts.filter(isDue).length;
+    $('bar').innerHTML = `<span><b>${n}</b> klar til opfølgning (sendt for ≥ ${followupDays()} dage siden, intet svar)</span>`;
+    return;
+  }
+  const pool = DATA.contacts.filter(c=>c.temp===curTab);
+  const n = {}; pool.forEach(c=>{ const st = rec(c.company).status || 'Ikke kontaktet'; n[st]=(n[st]||0)+1; });
+  const contacted = (n['Sendt']||0)+(n['Opfølgning sendt']||0)+(n['Svar modtaget']||0)+(n['Booket']||0)+(n['Nej tak']||0);
+  $('bar').innerHTML =
+    `<span><b>${contacted}/${pool.length}</b> kontaktet</span>`+
+    `<span>📤 Sendt: <b>${n['Sendt']||0}</b></span>`+
+    `<span>🔁 Opfulgt: <b>${n['Opfølgning sendt']||0}</b></span>`+
+    `<span>💬 Svar: <b>${n['Svar modtaget']||0}</b></span>`+
+    `<span>✅ Booket: <b>${n['Booket']||0}</b></span>`+
+    `<span>⬜ Mangler: <b>${n['Ikke kontaktet']||0}</b></span>`;
+}
+
+/* ---------- export / summary ---------- */
+function exportCSV(){
+  const rows = [['Kunde','Temp','Anbefalet placering','Segment','Status','Dato','Note']];
+  DATA.contacts.forEach(c=>{ const r = rec(c.company);
+    rows.push([c.company,c.temp,c.placement,c.segment,r.status||'Ikke kontaktet',r.date||'',r.note||'']); });
+  const csv = rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'hyde_status.csv'; a.click();
+}
+function summary(btn){
+  const g = {}; DATA.contacts.forEach(c=>{ const st = rec(c.company).status || 'Ikke kontaktet'; (g[st]=g[st]||[]).push(c); });
+  const fmt = c => c.company + (c.placement?(' ['+c.placement+']'):'') + (rec(c.company).date?(' '+rec(c.company).date):'');
+  let out = 'Hyde outreach-status pr. '+today()+'\n';
+  ['Sendt','Opfølgning sendt','Svar modtaget','Booket','Nej tak'].forEach(k=>{
+    if(g[k]) out += `\n${k} (${g[k].length}):\n` + g[k].map(fmt).map(x=>'- '+x).join('\n') + '\n';
+  });
+  out += `\nKlar til opfølgning: ${DATA.contacts.filter(isDue).length} · Mangler: ${(g['Ikke kontaktet']||[]).length}`;
+  copyText(out, btn);
+}
+
+/* ---------- misc ---------- */
+function esc(s){ return String(s).replace(/[&<>"]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+
+function bindGlobal(){
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>{
+    curTab = t.dataset.tab;
+    document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t));
+    render();
+  }));
+  $('q').addEventListener('input', render);
+  $('fil').addEventListener('change', render);
+  $('thr').addEventListener('change', render);
+  $('btnExport').addEventListener('click', exportCSV);
+  $('btnSummary').addEventListener('click', e=>summary(e.target));
+  $('btnReset').addEventListener('click', async ()=>{
+    if(confirm('Nulstil al status til den importerede CSV?')){
+      const res = await api('/api/state', { method:'POST', body: JSON.stringify({ reset:true }) });
+      const j = await res.json(); STATE = j.state || {}; render();
+    }
+  });
+  $('btnLogout').addEventListener('click', async ()=>{
+    await api('/api/logout', { method:'POST' }); location.reload();
+  });
+}
+
+/* ---------- auth / boot ---------- */
+function showGate(){ $('gate').style.display='flex'; $('app').style.display='none'; const pw=$('pw'); if(pw) pw.focus(); }
+function showApp(){ $('gate').style.display='none'; $('app').style.display=''; }
+
+async function loadData(){
+  const res = await api('/api/data');
+  if(res.status === 401){ showGate(); return false; }
+  if(!res.ok){ alert('Kunne ikke loade data.'); return false; }
+  const d = await res.json();
+  DATA = { contacts:d.contacts, placements:d.placements||{}, followupDaysDefault:d.followupDaysDefault||5 };
+  STATE = d.state || {};
+  HAS_AI = !!d.hasAI;
+  if(DATA.followupDaysDefault) $('thr').value = DATA.followupDaysDefault;
+  return true;
+}
+
+async function boot(){
+  if(await loadData()){
+    showApp();
+    bindGlobal();
+    render();
+  }
+}
+
+$('loginForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  $('loginErr').textContent = '';
+  const res = await api('/api/login', { method:'POST', body: JSON.stringify({ password: $('pw').value }) });
+  if(res.ok){
+    showApp();
+    if(await loadData()){ bindGlobal(); render(); }
+  } else {
+    $('loginErr').textContent = 'Forkert adgangskode.';
+  }
+});
+
+boot();
