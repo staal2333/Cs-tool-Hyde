@@ -84,3 +84,18 @@ header p{margin:5px 0 0;font-size:12.5px;color:#c8d3e6}
 .logmsg.fromkunde{align-self:flex-start;background:#f1f3f7;color:#2b3445}
 .loginput{width:100%;min-height:52px;resize:vertical;padding:8px 10px;border:1px solid #d3dbe8;border-radius:8px;font-size:13px;font-family:inherit}
 .logbtns{display:flex;gap:8px;margin-top:7px;flex-wrap:wrap}
+
+/* ---------- gmail control ---------- */
+.gmailbox{display:inline-flex;align-items:center;gap:8px}
+.gmail-hint{font-size:11.5px;color:#aeb9d0}
+.gmail-connect{background:#1a73e8;border-color:#1a73e8}
+.gmail-last{font-size:11px;color:#c8d3e6}
+.synctoast{margin-top:10px;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:600}
+.synctoast.ok{background:#173a2a;color:#bff0d2;border:1px solid #2c6b48}
+.synctoast.err{background:#3a1717;color:#f2cccc;border:1px solid #8a3a3a}
+
+/* ---------- thread strip on cards ---------- */
+.thread{font-size:12.5px;padding:7px 10px;border-radius:7px;margin-bottom:10px;line-height:1.45}
+.thread.real{background:#e8f5ec;border:1px solid #bfe3cb;color:#15402a}
+.thread.auto{background:#f3f4f7;border:1px solid #e2e6ee;color:#6b7280}
+.thread .thsnip{opacity:.85}

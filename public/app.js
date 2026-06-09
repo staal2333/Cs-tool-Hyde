@@ -9,6 +9,8 @@ const STATUSES = ['Ikke kontaktet','Sendt','Opfølgning sendt','Svar modtaget','
 let DATA = { contacts: [], placements: {}, followupDaysDefault: 5 };
 let STATE = {};            // { company: {status, date, note} }
 let LOGS = {};             // { company: [{who, text, ts}] }
+let THREADS = {};          // { company: {subject, from, date, snippet, auto} }
+let GMAIL = { configured:false, connected:false, lastSync:null };
 let HAS_AI = false;
 let curTab = 'kold';
 
@@ -149,6 +151,15 @@ function winboxHTML(c){
     </div>
   </div>`;
 }
+function threadHTML(company){
+  const t = THREADS[company];
+  if(!t) return '';
+  const when = t.date ? new Date(t.date).toLocaleDateString('da-DK') : '';
+  if(t.auto){
+    return `<div class="thread auto">🤖 Auto-svar (${esc(when)}): <span class="thsnip">${esc(t.snippet||'')}</span></div>`;
+  }
+  return `<div class="thread real">📨 Svar fra kunden (${esc(when)}): <span class="thsnip">${esc(t.snippet||'')}</span></div>`;
+}
 function cardHTML(c){
   const r = rec(c.company);
   const st = r.status || 'Ikke kontaktet';
@@ -164,6 +175,7 @@ function cardHTML(c){
     <div class="chead"><span class="brand">${esc(c.company)}</span>${badge}</div>
     <div class="subrow"><span class="sublbl">Emne</span><span class="subtxt subj">${esc(subject)}</span>
       <button class="btn small act-copysub">Kopiér emne</button></div>
+    ${threadHTML(c.company)}
     <div class="body">${esc(body)}</div>
     <div class="row2">
       <button class="btn act-copy" data-fu="${isFu?1:0}">${copyLabel}</button>
@@ -344,6 +356,40 @@ function bindGlobal(){
   });
 }
 
+/* ---------- gmail ---------- */
+function fmtSync(ts){ if(!ts) return 'aldrig'; const d=new Date(ts); return d.toLocaleString('da-DK',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }
+function renderGmailBox(){
+  const box = $('gmailbox'); if(!box) return;
+  if(!GMAIL.configured){ box.innerHTML = '<span class="gmail-hint" title="Sæt GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET i Vercel">📧 Gmail ikke opsat</span>'; return; }
+  if(!GMAIL.connected){ box.innerHTML = '<button class="hbtn gmail-connect" id="btnGmailConnect">🔗 Forbind Gmail</button>'; el('#btnGmailConnect').addEventListener('click', ()=>{ window.location='/api/google/auth'; }); return; }
+  box.innerHTML = `<button class="hbtn" id="btnSync">🔄 Synk Gmail</button><span class="gmail-last">sidst: ${fmtSync(GMAIL.lastSync)}</span>`;
+  el('#btnSync').addEventListener('click', runSync);
+}
+function toast(msg, ok=true){
+  const t = $('synctoast'); if(!t) return;
+  t.textContent = msg; t.className = 'synctoast ' + (ok?'ok':'err'); t.style.display='';
+  clearTimeout(toast._t); toast._t = setTimeout(()=>{ t.style.display='none'; }, 6000);
+}
+async function runSync(){
+  const btn = $('btnSync'); if(btn){ btn.disabled=true; btn.textContent='🔄 Synkroniserer…'; }
+  try {
+    const res = await api('/api/sync', { method:'POST' });
+    if(res.status === 401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ toast(j.message || 'Synk fejlede.', false); return; }
+    const s = j.summary;
+    toast(`✅ Synk færdig: ${s.sent} sendt-opdateret, ${s.replies} ægte svar, ${s.autoreplies} auto-svar filtreret.`, true);
+    if(await loadData()) render();
+  } catch(e){ toast('Netværksfejl under synk.', false); }
+  finally { if($('btnSync')){ $('btnSync').disabled=false; $('btnSync').textContent='🔄 Synk Gmail'; } }
+}
+// strip ?gmail=… from URL after handling
+function handleGmailReturn(){
+  const p = new URLSearchParams(location.search);
+  if(p.get('gmail')==='connected'){ history.replaceState({}, '', location.pathname); toast('✅ Gmail forbundet! Kører første synk…', true); runSync(); }
+  else if(p.get('gmail')==='error'){ history.replaceState({}, '', location.pathname); toast('Gmail-forbindelse mislykkedes. Prøv igen.', false); }
+}
+
 /* ---------- auth / boot ---------- */
 function showGate(){ $('gate').style.display='flex'; $('app').style.display='none'; const pw=$('pw'); if(pw) pw.focus(); }
 function showApp(){ $('gate').style.display='none'; $('app').style.display=''; }
@@ -356,7 +402,10 @@ async function loadData(){
   DATA = { contacts:d.contacts, placements:d.placements||{}, followupDaysDefault:d.followupDaysDefault||5 };
   STATE = d.state || {};
   LOGS = d.logs || {};
+  THREADS = d.threads || {};
+  GMAIL = d.gmail || { configured:false, connected:false, lastSync:null };
   HAS_AI = !!d.hasAI;
+  renderGmailBox();
   if(DATA.followupDaysDefault) $('thr').value = DATA.followupDaysDefault;
   return true;
 }
@@ -366,6 +415,7 @@ async function boot(){
     showApp();
     bindGlobal();
     render();
+    handleGmailReturn();
   }
 }
 
