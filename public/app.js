@@ -121,9 +121,22 @@ function angleFor(c){
 }
 
 /* ---------- rendering ---------- */
+function hasReply(company){ const t=THREADS[company]; const st=rec(company).status||''; return (t && !t.auto) || st==='Svar modtaget'; }
+function replyTime(company){ const t=THREADS[company]; if(t && t.date) return t.date; const d=parseDate(rec(company).date); return d?d.getTime():0; }
+function contactEmail(c){ return c.email || ''; }
 function contactsForTab(){
   if(curTab === 'opfolg') return DATA.contacts.filter(isDue).sort((a,b)=>daysSince(rec(b.company).date)-daysSince(rec(a.company).date));
+  if(curTab === 'svar') return DATA.contacts.filter(c=>hasReply(c.company)).sort((a,b)=>replyTime(b.company)-replyTime(a.company));
   return DATA.contacts.filter(c => c.temp === curTab).sort((a,b)=>a.order-b.order);
+}
+function gmailComposeUrl(c){
+  const to = contactEmail(c);
+  const su = c.subject || ('Hyde Media — ' + c.company);
+  const body = c.body || '';
+  return 'https://mail.google.com/mail/?view=cm&fs=1'
+    + '&to=' + encodeURIComponent(to)
+    + '&su=' + encodeURIComponent(su)
+    + '&body=' + encodeURIComponent(body);
 }
 function logEntriesHTML(company){
   const seen = new Set();
@@ -161,44 +174,60 @@ function threadHTML(company){
   }
   return `<div class="thread real">📨 Svar fra kunden (${esc(when)}): <span class="thsnip">${esc(t.snippet||'')}</span></div>`;
 }
+function contactMetaHTML(c){
+  const bits = [c.person && esc(c.person), c.email && esc(c.email), c.phone && esc(c.phone)].filter(Boolean);
+  return bits.length ? `<div class="cmeta">${bits.join(' · ')}</div>` : '';
+}
 function cardHTML(c){
   const r = rec(c.company);
   const st = r.status || 'Ikke kontaktet';
   const isFu = curTab === 'opfolg';
+  const openPanel = isFu || curTab === 'svar';
   const subject = isFu ? c.fuSubject : c.subject;
   const body = isFu ? c.fuBody : c.body;
-  const badge = isFu
-    ? `<span class="badge due">sendt for ${daysSince(r.date)} dage siden</span>`
-    : `<span class="badge">${esc(c.segment)}${c.placement ? ' · '+esc(c.placement) : ''}</span>`;
+  let badge;
+  if(curTab === 'svar') badge = `<span class="badge reply">💬 ${esc(st)}${r.date?' · '+esc(r.date):''}</span>`;
+  else if(isFu) badge = `<span class="badge due">sendt for ${daysSince(r.date)} dage siden</span>`;
+  else badge = `<span class="badge">${esc(c.segment||'')}${c.placement ? ' · '+esc(c.placement) : ''}</span>`;
   const opts = STATUSES.map(s => `<option ${s===st?'selected':''}>${s}</option>`).join('');
   const copyLabel = isFu ? '📋 Kopiér opfølgning' : '📋 Kopiér mail';
+  const gmailBtn = contactEmail(c)
+    ? `<button class="btn small act-gmail" title="Åbn i Gmail med modtager udfyldt">✉️ Skriv i Gmail</button>` : '';
   return `<div class="card ${statusClass(st)}" data-company="${esc(c.company)}">
-    <div class="chead"><span class="brand">${esc(c.company)}</span>${badge}</div>
-    <div class="subrow"><span class="sublbl">Emne</span><span class="subtxt subj">${esc(subject)}</span>
-      <button class="btn small act-copysub">Kopiér emne</button></div>
+    <div class="chead">
+      <div class="cbrand"><span class="brand">${esc(c.company)}</span>${c.custom?'<span class="tagcustom">egen</span>':''}${contactMetaHTML(c)}</div>
+      <div class="chead-r">${badge}
+        <button class="iconbtn act-edit" title="Rediger kunde">✏️</button>
+        <button class="iconbtn act-del" title="Slet kunde">🗑️</button>
+      </div>
+    </div>
+    ${subject ? `<div class="subrow"><span class="sublbl">Emne</span><span class="subtxt subj">${esc(subject)}</span>
+      <button class="btn small act-copysub">Kopiér emne</button></div>` : ''}
+    ${body ? `<div class="body">${esc(body)}</div>` : ''}
     ${threadHTML(c.company)}
-    <div class="body">${esc(body)}</div>
     <div class="row2">
-      <button class="btn act-copy" data-fu="${isFu?1:0}">${copyLabel}</button>
+      ${body ? `<button class="btn act-copy" data-fu="${isFu?1:0}">${copyLabel}</button>` : ''}
+      ${gmailBtn}
       <select class="st">${opts}</select>
-      ${isFu ? '' : '<input class="note" placeholder="Note…" value="'+esc(r.note||'')+'">'}
-      <button class="btn small act-win">🎯 ${isFu?'Skjul hjælp':'Vind kunden'}</button>
+      ${(isFu||curTab==='svar') ? '' : '<input class="note" placeholder="Note…" value="'+esc(r.note||'')+'">'}
+      <button class="btn small act-win">🎯 ${openPanel?'Skjul hjælp':'Vind kunden'}</button>
       <span class="when">${r.date ? '· '+r.date : ''}</span>
     </div>
-    <div class="winwrap"${isFu?'':' style="display:none"'}>${winboxHTML(c)}</div>
+    <div class="winwrap"${openPanel?'':' style="display:none"'}>${winboxHTML(c)}</div>
   </div>`;
 }
 function render(){
   const q = $('q').value.toLowerCase();
   const f = $('fil').value;
   let items = contactsForTab().filter(c=>{
-    const hay = (c.company+' '+c.subject+' '+c.segment).toLowerCase();
+    const hay = (c.company+' '+(c.subject||'')+' '+(c.segment||'')+' '+(c.person||'')+' '+(c.email||'')).toLowerCase();
     const st = rec(c.company).status || 'Ikke kontaktet';
     return hay.includes(q) && (!f || st === f);
   });
   $('list').innerHTML = items.map(cardHTML).join('');
   $('empty').style.display = items.length ? 'none' : '';
-  $('empty').textContent = curTab==='opfolg' ? 'Ingen opfølgninger er forfaldne lige nu 🎉' : 'Ingen kontakter matcher.';
+  $('empty').textContent = curTab==='opfolg' ? 'Ingen opfølgninger er forfaldne lige nu 🎉'
+    : (curTab==='svar' ? 'Ingen svar endnu — kør “Synk Gmail”.' : 'Ingen kontakter matcher.');
   bindCards();
   renderBar();
 }
@@ -214,13 +243,25 @@ function bindCards(){
     });
     const note = el('.note', card);
     if(note) note.addEventListener('change', e=>setRec(company,{note:e.target.value}));
-    el('.act-copysub', card).addEventListener('click', e=>copyText(el('.subj',card).textContent, e.target));
-    el('.act-copy', card).addEventListener('click', e=>{
+    const copysub = el('.act-copysub', card);
+    if(copysub) copysub.addEventListener('click', e=>copyText(el('.subj',card).textContent, e.target));
+    const copy = el('.act-copy', card);
+    if(copy) copy.addEventListener('click', e=>{
       const isFu = e.target.dataset.fu === '1';
       copyText(el('.body',card).textContent, e.target);
       if(isFu){ setRec(company,{status:'Opfølgning sendt', date:today()}).then(render); }
       else { const r = rec(company); if(!r.status || r.status==='Ikke kontaktet') setRec(company,{status:'Sendt', date:today()}).then(render); }
     });
+    const gmail = el('.act-gmail', card);
+    if(gmail) gmail.addEventListener('click', ()=>{
+      const c = DATA.contacts.find(x=>x.company===company);
+      window.open(gmailComposeUrl(c), '_blank');
+      const r = rec(company); if(!r.status || r.status==='Ikke kontaktet') setRec(company,{status:'Sendt', date:today()}).then(render);
+    });
+    const editb = el('.act-edit', card);
+    if(editb) editb.addEventListener('click', ()=>openContactModal(company));
+    const delb = el('.act-del', card);
+    if(delb) delb.addEventListener('click', ()=>deleteContact(company));
     const ai = el('.act-ai', card);
     if(ai) ai.addEventListener('click', ()=>askClaude(company, card, ai));
 
@@ -229,7 +270,7 @@ function bindCards(){
       const wrap = el('.winwrap', card);
       const open = wrap.style.display === 'none';
       wrap.style.display = open ? '' : 'none';
-      win.textContent = open ? '🎯 Skjul hjælp' : (curTab==='opfolg' ? '🎯 Skjul hjælp' : '🎯 Vind kunden');
+      win.textContent = open ? '🎯 Skjul hjælp' : '🎯 Vind kunden';
     });
 
     const saveLog = (who) => {
@@ -292,9 +333,15 @@ function renderCounts(){
   $('c-kold').textContent   = '('+DATA.contacts.filter(c=>c.temp==='kold').length+')';
   $('c-varm').textContent   = '('+DATA.contacts.filter(c=>c.temp==='varm').length+')';
   $('c-opfolg').textContent = '('+DATA.contacts.filter(isDue).length+')';
+  $('c-svar').textContent   = '('+DATA.contacts.filter(c=>hasReply(c.company)).length+')';
 }
 function renderBar(){
   renderCounts();
+  if(curTab === 'svar'){
+    const n = DATA.contacts.filter(c=>hasReply(c.company)).length;
+    $('bar').innerHTML = `<span><b>${n}</b> kunder har svaret — nyeste øverst. Klik 🤖 Spørg Claude for et svarforslag i din tone.</span>`;
+    return;
+  }
   if(curTab === 'opfolg'){
     const n = DATA.contacts.filter(isDue).length;
     $('bar').innerHTML = `<span><b>${n}</b> klar til opfølgning (sendt for ≥ ${followupDays()} dage siden, intet svar)</span>`;
@@ -355,6 +402,11 @@ function bindGlobal(){
   $('btnLogout').addEventListener('click', async ()=>{
     await api('/api/logout', { method:'POST' }); location.reload();
   });
+  $('btnAdd').addEventListener('click', ()=>openContactModal(null));
+  $('modalClose').addEventListener('click', closeModal);
+  $('modalCancel').addEventListener('click', closeModal);
+  $('modalSave').addEventListener('click', saveContact);
+  $('modal').addEventListener('click', e=>{ if(e.target===$('modal')) closeModal(); });
 }
 
 /* ---------- gmail ---------- */
@@ -366,10 +418,17 @@ function renderGmailBox(){
   box.innerHTML = `<button class="hbtn" id="btnSync">🔄 Synk Gmail</button><span class="gmail-last">sidst: ${fmtSync(GMAIL.lastSync)}</span>`;
   el('#btnSync').addEventListener('click', runSync);
 }
-function toast(msg, ok=true){
+function toast(msg, ok=true, action){
   const t = $('synctoast'); if(!t) return;
-  t.textContent = msg; t.className = 'synctoast ' + (ok?'ok':'err'); t.style.display='';
-  clearTimeout(toast._t); toast._t = setTimeout(()=>{ t.style.display='none'; }, 6000);
+  t.className = 'synctoast ' + (ok?'ok':'err'); t.style.display='';
+  t.innerHTML = '';
+  const span = document.createElement('span'); span.textContent = msg; t.appendChild(span);
+  if(action){
+    const b = document.createElement('button'); b.className='toastbtn'; b.textContent=action.label;
+    b.onclick = ()=>{ t.style.display='none'; action.fn(); };
+    t.appendChild(b);
+  }
+  clearTimeout(toast._t); toast._t = setTimeout(()=>{ t.style.display='none'; }, action?9000:6000);
 }
 async function runSync(){
   const btn = $('btnSync'); if(btn){ btn.disabled=true; btn.textContent='🔄 Synkroniserer…'; }
@@ -389,6 +448,68 @@ function handleGmailReturn(){
   const p = new URLSearchParams(location.search);
   if(p.get('gmail')==='connected'){ history.replaceState({}, '', location.pathname); toast('✅ Gmail forbundet! Kører første synk…', true); runSync(); }
   else if(p.get('gmail')==='error'){ history.replaceState({}, '', location.pathname); toast('Gmail-forbindelse mislykkedes. Prøv igen.', false); }
+}
+
+/* ---------- contacts CRUD ---------- */
+let editingCompany = null;
+function fillPlacementSelect(sel, val){
+  const opts = ['<option value="">— ingen —</option>'].concat(
+    Object.keys(DATA.placements||{}).map(p=>`<option ${p===val?'selected':''}>${esc(p)}</option>`));
+  sel.innerHTML = opts.join('');
+}
+function openContactModal(company){
+  editingCompany = company || null;
+  const c = company ? DATA.contacts.find(x=>x.company===company) : null;
+  $('modalTitle').textContent = c ? 'Rediger kunde' : 'Tilføj kunde';
+  $('modalErr').textContent = '';
+  $('f-company').value = c ? c.company : '';
+  $('f-company').disabled = !!c;
+  $('f-temp').value = c ? (c.temp||'kold') : 'kold';
+  fillPlacementSelect($('f-placement'), c ? (c.placement||'') : '');
+  $('f-segment').value = c ? (c.segment||'') : '';
+  $('f-person').value  = c ? (c.person||'')  : '';
+  $('f-email').value   = c ? (c.email||'')   : '';
+  $('f-phone').value   = c ? (c.phone||'')   : '';
+  $('f-subject').value = c ? (c.subject||'') : '';
+  $('f-body').value    = c ? (c.body||'')    : '';
+  $('modal').style.display = 'flex';
+  setTimeout(()=>{ const f=$('f-company'); if(f && !f.disabled) f.focus(); }, 40);
+}
+function closeModal(){ $('modal').style.display='none'; }
+async function saveContact(){
+  const company = $('f-company').value.trim();
+  if(!company){ $('modalErr').textContent = 'Firma er påkrævet.'; return; }
+  const fields = {
+    temp:$('f-temp').value, placement:$('f-placement').value, segment:$('f-segment').value,
+    person:$('f-person').value, email:$('f-email').value.trim(), phone:$('f-phone').value,
+    subject:$('f-subject').value, body:$('f-body').value,
+  };
+  const btn = $('modalSave'); btn.disabled = true;
+  try{
+    const payload = editingCompany
+      ? { action:'update', company:editingCompany, patch:fields }
+      : { action:'add', contact:{ company, ...fields } };
+    const res = await api('/api/contacts', { method:'POST', body: JSON.stringify(payload) });
+    if(res.status === 401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ $('modalErr').textContent = j.message || 'Kunne ikke gemme.'; return; }
+    DATA.contacts = j.contacts;
+    closeModal(); render();
+    toast(editingCompany ? '✏️ Kunde opdateret.' : '➕ Kunde tilføjet.', true);
+  }catch(e){ $('modalErr').textContent = 'Netværksfejl.'; }
+  finally{ btn.disabled = false; }
+}
+async function deleteContact(company){
+  if(!confirm('Skjul "'+company+'" fra listen? Du kan fortryde bagefter.')) return;
+  const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'delete', company }) });
+  if(res.status === 401){ showGate(); return; }
+  const j = await res.json();
+  if(j.ok){ DATA.contacts = j.contacts; render(); toast('🗑️ "'+company+'" skjult.', true, { label:'Fortryd', fn:()=>restoreContact(company) }); }
+}
+async function restoreContact(company){
+  const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'restore', company }) });
+  const j = await res.json();
+  if(j.ok){ DATA.contacts = j.contacts; render(); toast('↩️ "'+company+'" gendannet.', true); }
 }
 
 /* ---------- auth / boot ---------- */

@@ -29,6 +29,7 @@
         <h1>Hyde Media — Outreach</h1>
         <p>Kopiér → indsæt i Gmail. Status gemmes nu i skyen og deles på tværs af dine enheder. Opfølgninger dukker op efter X dage.</p>
         <div class="hbtns">
+          <button class="hbtn hbtn-primary" id="btnAdd">➕ Tilføj kunde</button>
           <button class="hbtn" id="btnExport">📥 Eksportér status (CSV)</button>
           <button class="hbtn" id="btnSummary">📋 Kopiér opsummering</button>
           <label>Opfølgning efter <input id="thr" type="number" value="5" min="1"> dage</label>
@@ -45,6 +46,7 @@
         <button class="tab active" data-tab="kold">🔵 Kolde <span class="tabcount" id="c-kold"></span></button>
         <button class="tab" data-tab="varm">🔥 Varme <span class="tabcount" id="c-varm"></span></button>
         <button class="tab" data-tab="opfolg">⏰ Opfølgning <span class="tabcount" id="c-opfolg"></span></button>
+        <button class="tab" data-tab="svar">💬 Svar <span class="tabcount" id="c-svar"></span></button>
       </div>
 
       <div class="bar" id="bar"></div>
@@ -64,6 +66,35 @@
 
       <div id="list"></div>
       <div id="empty" class="empty" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- Add / edit contact modal -->
+  <div id="modal" class="modal" style="display:none">
+    <div class="modalbox">
+      <div class="modalhead"><span id="modalTitle">Tilføj kunde</span><button class="modalx" id="modalClose">✕</button></div>
+      <div class="modalbody">
+        <label class="fld"><span>Firma *</span><input id="f-company" placeholder="Fx Acme A/S"></label>
+        <div class="fldrow">
+          <label class="fld"><span>Temperatur</span>
+            <select id="f-temp"><option value="kold">🔵 Kold</option><option value="varm">🔥 Varm</option></select></label>
+          <label class="fld"><span>Anbefalet placering</span>
+            <select id="f-placement"></select></label>
+        </div>
+        <label class="fld"><span>Segment / type</span><input id="f-segment" placeholder="Fx Første kontakt"></label>
+        <div class="fldrow">
+          <label class="fld"><span>Kontaktperson</span><input id="f-person" placeholder="Fx Dorthe Hansen"></label>
+          <label class="fld"><span>Email</span><input id="f-email" placeholder="navn@firma.dk"></label>
+          <label class="fld"><span>Telefon</span><input id="f-phone" placeholder="+45 …"></label>
+        </div>
+        <label class="fld"><span>Emne (mailudkast)</span><input id="f-subject" placeholder="Emnelinje til mailen"></label>
+        <label class="fld"><span>Besked (mailudkast)</span><textarea id="f-body" placeholder="Hej …"></textarea></label>
+        <div id="modalErr" class="loginerr"></div>
+      </div>
+      <div class="modalfoot">
+        <button class="btn small" id="modalCancel">Annullér</button>
+        <button class="btn" id="modalSave">Gem</button>
+      </div>
     </div>
   </div>
 

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '../lib/auth.js';
-import { DATA, contactByCompany, placementFor } from '../lib/data.js';
+import { DATA, placementFor } from '../lib/data.js';
+import { contactByCompany } from '../lib/contacts.js';
 import { loadLogs, loadTone } from '../lib/log.js';
 
 const MODEL = process.env.CLAUDE_MODEL || 'claude-opus-4-8';
@@ -69,7 +70,7 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const company = body.company;
-  const contact = company ? contactByCompany(company) : null;
+  const contact = company ? await contactByCompany(company) : null;
   if (!contact) return res.status(404).json({ error: 'unknown_company' });
 
   const pl = placementFor(contact);

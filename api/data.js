@@ -1,5 +1,6 @@
 import { requireAuth } from '../lib/auth.js';
 import { DATA } from '../lib/data.js';
+import { effectiveContacts } from '../lib/contacts.js';
 import { effectiveState } from '../lib/state.js';
 import { loadLogs } from '../lib/log.js';
 import { googleConfigured, loadGoogle } from '../lib/google.js';
@@ -8,11 +9,11 @@ import { loadThreads, loadLastSync } from '../lib/sync.js';
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return;
   try {
-    const [state, logs, google, threads, lastSync] = await Promise.all([
-      effectiveState(), loadLogs(), loadGoogle(), loadThreads(), loadLastSync(),
+    const [contacts, state, logs, google, threads, lastSync] = await Promise.all([
+      effectiveContacts(), effectiveState(), loadLogs(), loadGoogle(), loadThreads(), loadLastSync(),
     ]);
     return res.status(200).json({
-      contacts: DATA.contacts,
+      contacts,
       placements: DATA.placements || {},
       followupDaysDefault: DATA.followupDaysDefault || 5,
       generated: DATA.generated || null,
