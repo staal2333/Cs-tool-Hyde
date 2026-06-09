@@ -402,6 +402,10 @@ function bindGlobal(){
   $('btnLogout').addEventListener('click', async ()=>{
     await api('/api/logout', { method:'POST' }); location.reload();
   });
+  $('btnBrief').addEventListener('click', openBriefing);
+  $('briefClose').addEventListener('click', closeBriefing);
+  $('briefRefresh').addEventListener('click', loadBriefing);
+  $('brief').addEventListener('click', e=>{ if(e.target===$('brief')) closeBriefing(); });
   $('btnAdd').addEventListener('click', ()=>openContactModal(null));
   $('modalClose').addEventListener('click', closeModal);
   $('modalCancel').addEventListener('click', closeModal);
@@ -511,6 +515,22 @@ async function restoreContact(company){
   const j = await res.json();
   if(j.ok){ DATA.contacts = j.contacts; render(); toast('↩️ "'+company+'" gendannet.', true); }
 }
+
+/* ---------- daily briefing ---------- */
+async function loadBriefing(){
+  const b = $('briefBody');
+  if(!HAS_AI){ b.innerHTML = '<div class="ai-err">AI er slået fra — tilføj ANTHROPIC_API_KEY i Vercel.</div>'; return; }
+  b.innerHTML = '<div class="ai-loading">☀️ Claude læser hele din pipeline og prioriterer din dag…</div>';
+  try{
+    const res = await api('/api/briefing', { method:'POST', body: JSON.stringify({ followupDays: followupDays() }) });
+    if(res.status === 401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ b.innerHTML = '<div class="ai-err">'+esc(j.message||'Kunne ikke lave briefing.')+'</div>'; return; }
+    b.innerHTML = '<div class="ai-card brief-card">'+mdLite(j.text)+'</div>';
+  }catch(e){ b.innerHTML = '<div class="ai-err">Netværksfejl.</div>'; }
+}
+function openBriefing(){ $('brief').style.display='flex'; loadBriefing(); }
+function closeBriefing(){ $('brief').style.display='none'; }
 
 /* ---------- auth / boot ---------- */
 function showGate(){ $('gate').style.display='flex'; $('app').style.display='none'; const pw=$('pw'); if(pw) pw.focus(); }

@@ -29,6 +29,7 @@
         <h1>Hyde Media — Outreach</h1>
         <p>Kopiér → indsæt i Gmail. Status gemmes nu i skyen og deles på tværs af dine enheder. Opfølgninger dukker op efter X dage.</p>
         <div class="hbtns">
+          <button class="hbtn hbtn-sun" id="btnBrief">☀️ Dagens plan</button>
           <button class="hbtn hbtn-primary" id="btnAdd">➕ Tilføj kunde</button>
           <button class="hbtn" id="btnExport">📥 Eksportér status (CSV)</button>
           <button class="hbtn" id="btnSummary">📋 Kopiér opsummering</button>
@@ -95,6 +96,17 @@
         <button class="btn small" id="modalCancel">Annullér</button>
         <button class="btn" id="modalSave">Gem</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Daily briefing overlay -->
+  <div id="brief" class="modal" style="display:none">
+    <div class="modalbox briefbox">
+      <div class="modalhead"><span>☀️ Dagens plan</span>
+        <div><button class="btn small" id="briefRefresh">↻ Opdatér</button>
+        <button class="modalx" id="briefClose">✕</button></div>
+      </div>
+      <div class="modalbody" id="briefBody"></div>
     </div>
   </div>
 
