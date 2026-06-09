@@ -1,0 +1,24 @@
+name: Auto-sync Gmail
+
+# Kører hver 30. minut (GitHub kan forsinke lidt under spidsbelastning).
+# Kan også køres manuelt via "Run workflow"-knappen på Actions-fanen.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log ind og synkronisér Gmail
+        env:
+          PW: ${{ secrets.APP_PASSWORD }}
+          BASE: https://cs-tool-hyde.vercel.app
+        run: |
+          set -e
+          if [ -z "$PW" ]; then echo "Mangler GitHub-secret APP_PASSWORD"; exit 1; fi
+          curl -s -c cj.txt -X POST -H 'content-type: application/json' \
+            --data "$(jq -nc --arg p "$PW" '{password:$p}')" "$BASE/api/login" >/dev/null
+          echo "Kører synk…"
+          curl -s -b cj.txt -X POST "$BASE/api/sync" -m 90 -w '\nHTTP %{http_code}\n'
