@@ -126,7 +126,8 @@ function contactsForTab(){
   return DATA.contacts.filter(c => c.temp === curTab).sort((a,b)=>a.order-b.order);
 }
 function logEntriesHTML(company){
-  const entries = LOGS[company] || [];
+  const seen = new Set();
+  const entries = (LOGS[company] || []).filter(e=>{ const k=e.who+'|'+e.text; if(seen.has(k)) return false; seen.add(k); return true; });
   if(!entries.length) return '<div class="logempty">Ingen dialog gemt endnu.</div>';
   return entries.map(e=>`<div class="logmsg ${e.who==='kunde'?'fromkunde':'frommig'}"><span class="logwho">${e.who==='kunde'?'Kunde':'Mig'}</span>${esc(e.text)}</div>`).join('');
 }
