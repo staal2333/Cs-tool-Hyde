@@ -202,3 +202,19 @@ header p{margin:6px 0 0;font-size:12.5px;color:#bccbe6;max-width:680px}
 .brief-card ol li{margin:7px 0}
 .brief-card p{margin:9px 0}
 .brief-card ul{margin:6px 0;padding-left:18px}
+
+/* ---------- mail generator ---------- */
+.draftwrap{margin-top:8px}
+.draftbox{margin-top:12px;border-top:1px solid var(--line);padding-top:13px}
+.drafthead{font-size:13px;font-weight:800;color:var(--brand);margin-bottom:9px}
+.draftctrls{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.dlab{display:flex;flex-direction:column;gap:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.dlab select{padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-size:13px;font-family:inherit;background:var(--card);font-weight:600;color:var(--ink)}
+.dlab select:focus{outline:none;border-color:var(--accent)}
+.draft-out{margin-top:12px;display:flex;flex-direction:column;gap:12px}
+.variant{background:linear-gradient(#fbfcff,#fff);border:1px solid #dbe3f1;border-radius:12px;padding:13px 15px;box-shadow:var(--shadow-sm)}
+.vhead{margin-bottom:8px}
+.vangle{display:inline-block;font-size:11px;font-weight:800;color:#1e50d6;background:#e7eefc;border:1px solid #d3e0fb;border-radius:7px;padding:3px 10px}
+.vsubrow{display:flex;align-items:center;gap:9px;background:#f7f9fd;border:1px solid var(--line-2);border-radius:10px;padding:8px 11px;margin-bottom:9px;flex-wrap:wrap}
+.v-body{font-size:13.5px;line-height:1.6;color:#222b3a;white-space:pre-wrap;background:#fff;border:1px solid var(--line-2);border-radius:10px;padding:11px 13px}
+.vacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}

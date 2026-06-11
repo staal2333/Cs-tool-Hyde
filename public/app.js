@@ -129,14 +129,96 @@ function contactsForTab(){
   if(curTab === 'svar') return DATA.contacts.filter(c=>hasReply(c.company)).sort((a,b)=>replyTime(b.company)-replyTime(a.company));
   return DATA.contacts.filter(c => c.temp === curTab).sort((a,b)=>a.order-b.order);
 }
-function gmailComposeUrl(c){
-  const to = contactEmail(c);
-  const su = c.subject || ('Hyde Media — ' + c.company);
-  const body = c.body || '';
+function gmailComposeUrlRaw(to, su, body){
   return 'https://mail.google.com/mail/?view=cm&fs=1'
-    + '&to=' + encodeURIComponent(to)
-    + '&su=' + encodeURIComponent(su)
-    + '&body=' + encodeURIComponent(body);
+    + '&to=' + encodeURIComponent(to||'')
+    + '&su=' + encodeURIComponent(su||'')
+    + '&body=' + encodeURIComponent(body||'');
+}
+function gmailComposeUrl(c){
+  return gmailComposeUrlRaw(contactEmail(c), c.subject || ('Hyde Media — ' + c.company), c.body || '');
+}
+
+/* ---------- mail generator ---------- */
+const SCEN = [
+  ['open','Åbning (kold)'],['reopen','Genåbning af dialog'],['followup','Opfølgning'],
+  ['nudge','Nudge'],['after_no','Efter et nej'],['close','Luk handlen'],['reply','Svar på kundens mail'],
+];
+function defaultScenario(c){
+  if(hasReply(c.company)) return 'reply';
+  const s = (c.segment||'').toLowerCase();
+  if(s.includes('første')) return 'open';
+  if(s.includes('re-aktiv')||s.includes('genåbn')||s.includes('gensend')||s.includes('ny kontakt')) return 'reopen';
+  if(s.includes('nudge')) return 'nudge';
+  if(s.includes('følg op')||s.includes('opfølg')) return 'followup';
+  if(s.includes('nurtur')||s.includes('nej')) return 'after_no';
+  if(s.includes('luk')||s.includes('fremryk')) return 'close';
+  return c.temp==='varm' ? 'followup' : 'open';
+}
+function draftPanelHTML(c){
+  const def = defaultScenario(c);
+  const scen = SCEN.map(([v,l])=>`<option value="${v}" ${v===def?'selected':''}>${l}</option>`).join('');
+  const plac = Object.keys(DATA.placements||{}).map(p=>`<option ${p===c.placement?'selected':''}>${esc(p)}</option>`).join('');
+  return `<div class="draftbox">
+    <div class="drafthead">✍️ Generér mailudkast — 3 forslag i din tone</div>
+    <div class="draftctrls">
+      <label class="dlab">Scenarie<select class="d-scenario">${scen}</select></label>
+      <label class="dlab">Placering<select class="d-placement">${plac}</select></label>
+      <label class="dlab">Sprog<select class="d-lang"><option value="da">Dansk</option><option value="en">English</option></select></label>
+      <button class="btn small act-draft-gen">✍️ Generér 3 forslag</button>
+    </div>
+    <div class="draft-out"></div>
+  </div>`;
+}
+function variantHTML(v, i){
+  return `<div class="variant" data-i="${i}">
+    <div class="vhead"><span class="vangle">${esc(v.angle)}</span></div>
+    <div class="vsubrow"><span class="sublbl">Emne</span><span class="v-subj subtxt">${esc(v.subject)}</span>
+      <button class="btn small act-vcopysub">Kopiér emne</button></div>
+    <div class="v-body">${esc(v.body)}</div>
+    <div class="vacts">
+      <button class="btn small act-vcopy">📋 Kopiér mail</button>
+      <button class="btn small act-vgmail">✉️ Skriv i Gmail</button>
+      <button class="btn small act-vsave">💾 Gem som udkast</button>
+    </div>
+  </div>`;
+}
+function bindVariants(company, card){
+  const c = DATA.contacts.find(x=>x.company===company);
+  card.querySelectorAll('.variant').forEach(v=>{
+    const subj = el('.v-subj', v).textContent;
+    const bodyt = el('.v-body', v).textContent;
+    const markSent = ()=>{ const r=rec(company); if(!r.status||r.status==='Ikke kontaktet') setRec(company,{status:'Sendt',date:today()}).then(render); };
+    el('.act-vcopysub', v).addEventListener('click', e=>copyText(subj, e.target));
+    el('.act-vcopy', v).addEventListener('click', e=>{ copyText(bodyt, e.target); markSent(); });
+    el('.act-vgmail', v).addEventListener('click', ()=>{ window.open(gmailComposeUrlRaw(contactEmail(c), subj, bodyt), '_blank'); markSent(); });
+    el('.act-vsave', v).addEventListener('click', async (e)=>{
+      e.target.disabled = true;
+      const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'update', company, patch:{ subject:subj, body:bodyt } }) });
+      if(res.status===401){ showGate(); return; }
+      const j = await res.json();
+      if(j.ok){ DATA.contacts = j.contacts; toast('💾 Gemt som udkast for '+company, true); }
+      e.target.disabled = false;
+    });
+  });
+}
+async function generateDrafts(company, card){
+  const out = el('.draft-out', card);
+  if(!HAS_AI){ out.innerHTML='<div class="ai-err">AI er slået fra — tilføj ANTHROPIC_API_KEY.</div>'; return; }
+  const scenario = el('.d-scenario', card).value;
+  const placement = el('.d-placement', card).value;
+  const lang = el('.d-lang', card).value;
+  const btn = el('.act-draft-gen', card); btn.disabled=true; const lbl=btn.textContent; btn.textContent='✍️ Skriver…';
+  out.innerHTML = '<div class="ai-loading">✍️ Claude skriver 3 forslag i din tone…</div>';
+  try{
+    const res = await api('/api/draft', { method:'POST', body: JSON.stringify({ company, scenario, placement, lang }) });
+    if(res.status===401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ out.innerHTML='<div class="ai-err">'+esc(j.message||'Kunne ikke generere.')+'</div>'; return; }
+    out.innerHTML = j.variants.map(variantHTML).join('');
+    bindVariants(company, card);
+  }catch(e){ out.innerHTML='<div class="ai-err">Netværksfejl.</div>'; }
+  finally{ btn.disabled=false; btn.textContent=lbl; }
 }
 function logEntriesHTML(company){
   const seen = new Set();
@@ -210,10 +292,12 @@ function cardHTML(c){
       ${gmailBtn}
       <select class="st">${opts}</select>
       ${(isFu||curTab==='svar') ? '' : '<input class="note" placeholder="Note…" value="'+esc(r.note||'')+'">'}
+      <button class="btn small act-draft-toggle">✍️ Skriv mail</button>
       <button class="btn small act-win">🎯 ${openPanel?'Skjul hjælp':'Vind kunden'}</button>
       <span class="when">${r.date ? '· '+r.date : ''}</span>
     </div>
     <div class="winwrap"${openPanel?'':' style="display:none"'}>${winboxHTML(c)}</div>
+    <div class="draftwrap" style="display:none">${draftPanelHTML(c)}</div>
   </div>`;
 }
 function render(){
@@ -272,6 +356,16 @@ function bindCards(){
       wrap.style.display = open ? '' : 'none';
       win.textContent = open ? '🎯 Skjul hjælp' : '🎯 Vind kunden';
     });
+
+    const dtog = el('.act-draft-toggle', card);
+    if(dtog) dtog.addEventListener('click', ()=>{
+      const w = el('.draftwrap', card);
+      const open = w.style.display === 'none';
+      w.style.display = open ? '' : 'none';
+      dtog.textContent = open ? '✍️ Skjul mail' : '✍️ Skriv mail';
+    });
+    const dgen = el('.act-draft-gen', card);
+    if(dgen) dgen.addEventListener('click', ()=>generateDrafts(card.dataset.company, card));
 
     const saveLog = (who) => {
       const ta = el('.loginput', card);
