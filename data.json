@@ -8,7 +8,9 @@
    "price": "72.000 kr.",
    "list": "91.408 kr.",
    "area": "Christianshavn",
-   "period": "uge 26+27 (22. juni – 5. juli)"
+   "period": "uge 26+27 (22. juni – 5. juli)",
+   "lat": 55.6755,
+   "lng": 12.5945
   },
   "Gammel Kongevej 49": {
    "sqm": "188",
@@ -16,7 +18,9 @@
    "price": "83.000 kr.",
    "list": "110.720 kr.",
    "area": "Frederiksberg",
-   "period": "uge 26+27 (22. juni – 5. juli)"
+   "period": "uge 26+27 (22. juni – 5. juli)",
+   "lat": 55.674,
+   "lng": 12.552
   },
   "Gammel Kongevej 33B": {
    "sqm": "110",
@@ -24,7 +28,9 @@
    "price": "42.500 kr.",
    "list": "92.472 kr.",
    "area": "Frederiksberg",
-   "period": "uge 26+27 (22. juni – 5. juli)"
+   "period": "uge 26+27 (22. juni – 5. juli)",
+   "lat": 55.6745,
+   "lng": 12.5535
   },
   "Nørrebrogade 195": {
    "sqm": "180,2",
@@ -32,7 +38,9 @@
    "price": "90.000 kr.",
    "list": "135.331 kr.",
    "area": "København N",
-   "period": "uge 26+27 (22. juni – 5. juli)"
+   "period": "uge 26+27 (22. juni – 5. juli)",
+   "lat": 55.701,
+   "lng": 12.538
   },
   "Silkeborgvej": {
    "sqm": "53",
@@ -40,7 +48,9 @@
    "price": "24.000 kr.",
    "list": "",
    "area": "Aarhus",
-   "period": "uge 26+27 (22. juni – 5. juli)"
+   "period": "uge 26+27 (22. juni – 5. juli)",
+   "lat": 56.152,
+   "lng": 10.18
   },
   "Bredgade 71": {
    "sqm": "79",
@@ -48,7 +58,9 @@
    "price": "41.000 kr.",
    "list": "70.374 kr.",
    "area": "København K",
-   "period": "uge 26+27 (22. juni – 5. juli)"
+   "period": "uge 26+27 (22. juni – 5. juli)",
+   "lat": 55.6878,
+   "lng": 12.5912
   }
  },
  "contacts": [

@@ -352,9 +352,13 @@ function cardHTML(c){
 }
 function render(){
   const isDash = curTab === 'dash';
+  const isMap = curTab === 'kort';
   const ctrls = document.querySelector('.controls');
-  if(ctrls) ctrls.style.display = isDash ? 'none' : '';
-  $('bar').style.display = isDash ? 'none' : '';
+  if(ctrls) ctrls.style.display = (isDash||isMap) ? 'none' : '';
+  $('bar').style.display = (isDash||isMap) ? 'none' : '';
+  $('list').style.display = isMap ? 'none' : '';
+  $('mapview').style.display = isMap ? '' : 'none';
+  if(isMap){ $('empty').style.display='none'; renderCounts(); showMap(); return; }
   if(isDash){
     $('list').innerHTML = dashboardHTML();
     $('empty').style.display = 'none';
@@ -616,6 +620,40 @@ function dashboardHTML(){
       </div>
     </div>
   </div>`;
+}
+
+/* ---------- placement map ---------- */
+let MAP = null;
+function mapPopupHTML(name){
+  const p = DATA.placements[name];
+  const n = DATA.contacts.filter(c=>c.placement===name).length;
+  const img = hasMockup(name) ? `<img class="mappop-img" src="${mockUrl(name)}" alt="">` : '';
+  const bits = [p.sqm && p.sqm+' m²', p.impr && p.impr+' eksp./uge', p.price && p.price].filter(Boolean).join(' · ');
+  return `<div class="mappop">${img}<b>${esc(name)}</b>`+
+    `<div class="mappop-area">${esc(p.area||'')}</div>`+
+    (bits?`<div class="mappop-row">${esc(bits)}</div>`:'')+
+    (p.period?`<div class="mappop-row">${esc(p.period)}</div>`:'')+
+    `<div class="mappop-cnt">${n} kunde${n===1?'':'r'} anbefalet her</div></div>`;
+}
+function initMap(){
+  if(typeof L === 'undefined'){ $('map').innerHTML = '<div class="ai-err" style="padding:16px">Kortet kunne ikke indlæses (ingen forbindelse).</div>'; return; }
+  MAP = L.map('map', { scrollWheelZoom:false }).setView([55.69,12.57], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap'
+  }).addTo(MAP);
+  const pts = [];
+  Object.keys(DATA.placements||{}).forEach(name=>{
+    const p = DATA.placements[name];
+    if(typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
+    L.marker([p.lat, p.lng]).addTo(MAP).bindPopup(mapPopupHTML(name));
+    pts.push([p.lat, p.lng]);
+  });
+  if(pts.length) MAP.fitBounds(pts, { padding:[40,40], maxZoom:13 });
+}
+function showMap(){
+  if(!MAP) initMap();
+  // Leaflet needs a sized, visible container — recompute after it's shown.
+  if(MAP) setTimeout(()=>MAP.invalidateSize(), 60);
 }
 
 /* ---------- export / summary ---------- */
