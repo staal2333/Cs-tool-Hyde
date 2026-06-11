@@ -17,8 +17,16 @@ const SCENARIOS = {
 };
 
 function placementBlock(name) {
-  const p = DATA.placements[name];
+  const want = String(name || '').normalize('NFC');
+  let key = name;
+  let p = DATA.placements[name];
+  if (!p) {
+    for (const k of Object.keys(DATA.placements)) {
+      if (k.normalize('NFC') === want) { p = DATA.placements[k]; key = k; break; }
+    }
+  }
   if (!p) return null;
+  name = key;
   const list = parseInt(String(p.list || '').replace(/\D/g, ''));
   const price = parseInt(String(p.price || '').replace(/\D/g, ''));
   const pct = list && price && list > price ? Math.round((1 - price / list) * 100) : null;
