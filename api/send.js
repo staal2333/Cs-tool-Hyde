@@ -4,6 +4,9 @@ import { sendMessage } from '../lib/gmail.js';
 import { contactByCompany } from '../lib/contacts.js';
 import { applyPatch } from '../lib/state.js';
 import { appendLog } from '../lib/log.js';
+import { loadPlacementImage } from '../lib/placements.js';
+
+const DATA_URL = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/is;
 
 function todayDK() {
   return new Date().toLocaleDateString('da-DK');
@@ -18,7 +21,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'method_not_allowed' });
   }
 
-  const { company, to, subject, body, threadId, status } = req.body || {};
+  const { company, to, subject, body, threadId, status, attachPlacement } = req.body || {};
   if (!company || !to || !body) {
     return res.status(400).json({ error: 'bad_request', message: 'Mangler modtager, emne eller tekst.' });
   }
@@ -33,8 +36,16 @@ export default async function handler(req, res) {
     return res.status(409).json({ error: 'not_connected', message: 'Gmail er ikke forbundet. Tryk “Forbind Gmail”.' });
   }
 
+  // Optionally attach the placement's mockup image.
+  let attachments;
+  if (attachPlacement) {
+    const img = await loadPlacementImage(attachPlacement);
+    const m = img && img.dataUrl ? DATA_URL.exec(img.dataUrl) : null;
+    if (m) attachments = [{ filename: img.filename || 'mockup.jpg', mime: m[1], base64: m[2] }];
+  }
+
   try {
-    await sendMessage(token, { to, subject, body, threadId });
+    await sendMessage(token, { to, subject, body, threadId, attachments });
   } catch (err) {
     console.error('send error', err?.status, err?.detail);
     if (err?.status === 403) {

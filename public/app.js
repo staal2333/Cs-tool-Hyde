@@ -11,6 +11,8 @@ let STATE = {};            // { company: {status, date, note} }
 let LOGS = {};             // { company: [{who, text, ts}] }
 let THREADS = {};          // { company: {subject, from, date, snippet, auto} }
 let GMAIL = { configured:false, connected:false, lastSync:null };
+let PLACEMENT_IMAGES = new Set();   // placement names that have a mockup
+let MOCK_BUST = 0;                  // bumped after upload/delete to bust <img> cache
 let HAS_AI = false;
 let curTab = 'kold';
 
@@ -203,7 +205,9 @@ function bindVariants(company, card){
     const vsend = el('.act-vsend', v);
     if(vsend) vsend.addEventListener('click', e=>{
       const threadId = hasReply(company) ? (THREADS[company] && THREADS[company].threadId) : null;
-      sendMail(company, { to:contactEmail(c), subject:subj, body:bodyt, status:'Sendt', threadId }, e.target);
+      const plac = (el('.d-placement', card) || {}).value || c.placement;
+      const attachPlacement = hasMockup(plac) ? plac : null;
+      sendMail(company, { to:contactEmail(c), subject:subj, body:bodyt, status:'Sendt', threadId, attachPlacement }, e.target);
     });
     el('.act-vgmail', v).addEventListener('click', ()=>{ window.open(gmailComposeUrlRaw(contactEmail(c), subj, bodyt), '_blank'); markSent(); });
     el('.act-vsave', v).addEventListener('click', async (e)=>{
@@ -311,6 +315,11 @@ function cardHTML(c){
     ? `<button class="btn small act-gmail" title="Åbn i Gmail med modtager udfyldt">✉️ Skriv i Gmail</button>` : '';
   const sendBtn = (body && canSend(c))
     ? `<button class="btn small act-send" title="Send mailen direkte via Gmail og sæt status">📤 Send</button>` : '';
+  const mock = hasMockup(c.placement);
+  const attachChk = (mock && canSend(c))
+    ? `<label class="attachchk" title="Vedhæft mockup af ${esc(c.placement)} når du sender"><input type="checkbox" class="act-attach" checked> 📎 Mockup</label>` : '';
+  const mockThumb = mock
+    ? `<a class="mockchip" href="${mockUrl(c.placement)}" target="_blank" title="Mockup: ${esc(c.placement)}"><img src="${mockUrl(c.placement)}" alt=""></a>` : '';
   return `<div class="card ${statusClass(st)}${fuT ? ' fu-'+fuT : ''}" data-company="${esc(c.company)}">
     <div class="chead">
       <div class="cbrand"><span class="brand">${esc(c.company)}</span>${c.custom?'<span class="tagcustom">egen</span>':''}${contactMetaHTML(c)}</div>
@@ -323,10 +332,12 @@ function cardHTML(c){
     ${subject ? `<div class="subrow"><span class="sublbl">Emne</span><span class="subtxt subj">${esc(subject)}</span>
       <button class="btn small act-copysub">Kopiér emne</button></div>` : ''}
     ${body ? `<div class="body">${esc(body)}</div>` : ''}
+    ${mockThumb}
     ${threadHTML(c.company)}
     <div class="row2">
       ${body ? `<button class="btn act-copy" data-fu="${isFu?1:0}">${copyLabel}</button>` : ''}
       ${sendBtn}
+      ${attachChk}
       ${gmailBtn}
       <select class="st">${opts}</select>
       ${(isFu||curTab==='svar') ? '' : '<input class="note" placeholder="Note…" value="'+esc(r.note||'')+'">'}
@@ -389,7 +400,9 @@ function bindCards(){
       const body = isFu ? c.fuBody : c.body;
       const status = isFu ? 'Opfølgning sendt' : 'Sendt';
       const threadId = hasReply(company) ? (THREADS[company] && THREADS[company].threadId) : null;
-      sendMail(company, { to:contactEmail(c), subject, body, status, threadId }, e.target);
+      const chk = el('.act-attach', card);
+      const attachPlacement = (chk && chk.checked && hasMockup(c.placement)) ? c.placement : null;
+      sendMail(company, { to:contactEmail(c), subject, body, status, threadId, attachPlacement }, e.target);
     });
     const editb = el('.act-edit', card);
     if(editb) editb.addEventListener('click', ()=>openContactModal(company));
@@ -568,6 +581,9 @@ function bindGlobal(){
   $('btnClassify').addEventListener('click', classifyContacts);
   $('fbuyer').addEventListener('change', render);
   $('btnBrief').addEventListener('click', openBriefing);
+  $('btnMockups').addEventListener('click', openMockups);
+  $('mockupsClose').addEventListener('click', closeMockups);
+  $('mockups').addEventListener('click', e=>{ if(e.target===$('mockups')) closeMockups(); });
   $('briefClose').addEventListener('click', closeBriefing);
   $('briefRefresh').addEventListener('click', loadBriefing);
   $('brief').addEventListener('click', e=>{ if(e.target===$('brief')) closeBriefing(); });
@@ -615,13 +631,14 @@ async function runSync(){
 /* ---------- send directly via Gmail ---------- */
 function canSend(c){ return GMAIL.connected && !!contactEmail(c); }
 async function sendMail(company, opts, btn){
-  const { to, subject, body, status, threadId } = opts;
+  const { to, subject, body, status, threadId, attachPlacement } = opts;
   if(!to){ toast('Ingen email på kunden — tilføj en email først (✏️).', false); return; }
   if(!body){ toast('Intet mailudkast at sende — skriv en mail først.', false); return; }
-  if(!confirm('Send mailen direkte til '+to+' nu?')) return;
+  const attachNote = attachPlacement ? ' (mockup vedhæftes)' : '';
+  if(!confirm('Send mailen direkte til '+to+' nu?'+attachNote)) return;
   const o = btn.textContent; btn.disabled = true; btn.textContent = '📤 Sender…';
   try{
-    const res = await api('/api/send', { method:'POST', body: JSON.stringify({ company, to, subject, body, status, threadId }) });
+    const res = await api('/api/send', { method:'POST', body: JSON.stringify({ company, to, subject, body, status, threadId, attachPlacement }) });
     if(res.status === 401){ showGate(); return; }
     const j = await res.json();
     if(!res.ok){ toast(j.message || 'Kunne ikke sende.', false); btn.disabled=false; btn.textContent=o; return; }
@@ -732,6 +749,79 @@ async function loadBriefing(){
 function openBriefing(){ $('brief').style.display='flex'; loadBriefing(); }
 function closeBriefing(){ $('brief').style.display='none'; }
 
+/* ---------- placement mockups ---------- */
+function hasMockup(name){ return !!name && PLACEMENT_IMAGES.has(name); }
+function mockUrl(name){ return '/api/placements?img=' + encodeURIComponent(name) + '&v=' + MOCK_BUST; }
+// Downscale a picked image to keep it well under the storage size limit.
+function downscaleImage(file, maxW=1280, quality=0.82){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const scale = Math.min(1, maxW / img.width);
+      const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+      const cv = document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(cv.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = ()=>reject(new Error('billede kunne ikke læses'));
+    const fr = new FileReader();
+    fr.onload = ()=>{ img.src = fr.result; };
+    fr.onerror = ()=>reject(new Error('fil kunne ikke læses'));
+    fr.readAsDataURL(file);
+  });
+}
+function renderMockupList(){
+  const box = $('mockupList'); if(!box) return;
+  const names = Object.keys(DATA.placements||{});
+  box.innerHTML = names.map(name=>{
+    const p = DATA.placements[name];
+    const has = hasMockup(name);
+    const thumb = has
+      ? `<img class="mockprev" src="${mockUrl(name)}" alt="">`
+      : `<div class="mockprev empty">Ingen mockup</div>`;
+    return `<div class="mockrow" data-name="${esc(name)}">
+      ${thumb}
+      <div class="mockinfo"><b>${esc(name)}</b><span>${esc(p.area||'')}</span></div>
+      <div class="mockacts">
+        <label class="btn small mockup-pick">${has?'Skift':'Upload'}<input type="file" accept="image/*" class="act-mock-file" hidden></label>
+        ${has?`<button class="btn small act-mock-del">Fjern</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('.mockrow').forEach(row=>{
+    const name = row.dataset.name;
+    const file = el('.act-mock-file', row);
+    if(file) file.addEventListener('change', e=>uploadMockup(name, e.target.files[0], row));
+    const del = el('.act-mock-del', row);
+    if(del) del.addEventListener('click', ()=>removeMockup(name, row));
+  });
+}
+async function uploadMockup(name, file, row){
+  if(!file) return;
+  const pick = el('.mockup-pick', row); const lbl = pick ? pick.firstChild.textContent : '';
+  if(pick) pick.firstChild.textContent = 'Uploader…';
+  try{
+    const dataUrl = await downscaleImage(file);
+    const res = await api('/api/placements', { method:'POST', body: JSON.stringify({ action:'set', placement:name, image:{ dataUrl, filename: (name.replace(/[^\w]+/g,'_')||'mockup')+'.jpg' } }) });
+    if(res.status===401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ toast(j.message || 'Kunne ikke gemme billedet.', false); if(pick) pick.firstChild.textContent=lbl; return; }
+    PLACEMENT_IMAGES = new Set(j.withImage || []);
+    MOCK_BUST++;
+    renderMockupList(); render();
+    toast('🖼️ Mockup gemt for '+name+'.', true);
+  }catch(e){ toast('Billedet kunne ikke behandles.', false); if(pick) pick.firstChild.textContent=lbl; }
+}
+async function removeMockup(name, row){
+  if(!confirm('Fjern mockup for "'+name+'"?')) return;
+  const res = await api('/api/placements', { method:'POST', body: JSON.stringify({ action:'delete', placement:name }) });
+  if(res.status===401){ showGate(); return; }
+  const j = await res.json();
+  if(j.ok){ PLACEMENT_IMAGES = new Set(j.withImage || []); MOCK_BUST++; renderMockupList(); render(); toast('🗑️ Mockup fjernet for '+name+'.', true); }
+}
+function openMockups(){ $('mockups').style.display='flex'; renderMockupList(); }
+function closeMockups(){ $('mockups').style.display='none'; }
+
 /* ---------- auth / boot ---------- */
 function showGate(){ $('gate').style.display='flex'; $('app').style.display='none'; const pw=$('pw'); if(pw) pw.focus(); }
 function showApp(){ $('gate').style.display='none'; $('app').style.display=''; }
@@ -746,6 +836,7 @@ async function loadData(){
   LOGS = d.logs || {};
   THREADS = d.threads || {};
   GMAIL = d.gmail || { configured:false, connected:false, lastSync:null };
+  PLACEMENT_IMAGES = new Set(d.placementImages || []);
   HAS_AI = !!d.hasAI;
   renderGmailBox();
   if(DATA.followupDaysDefault) $('thr').value = DATA.followupDaysDefault;

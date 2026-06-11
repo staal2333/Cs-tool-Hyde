@@ -32,6 +32,7 @@
           <button class="hbtn hbtn-sun" id="btnBrief">☀️ Dagens plan</button>
           <button class="hbtn hbtn-primary" id="btnAdd">➕ Tilføj kunde</button>
           <button class="hbtn" id="btnClassify">🏷️ Auto-tag indkøb</button>
+          <button class="hbtn" id="btnMockups">🖼️ Mockups</button>
           <button class="hbtn" id="btnExport">📥 Eksportér status (CSV)</button>
           <button class="hbtn" id="btnSummary">📋 Kopiér opsummering</button>
           <label>Opfølgning efter <input id="thr" type="number" value="5" min="1"> dage</label>
@@ -104,6 +105,17 @@
       <div class="modalfoot">
         <button class="btn small" id="modalCancel">Annullér</button>
         <button class="btn" id="modalSave">Gem</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Placement mockups manager -->
+  <div id="mockups" class="modal" style="display:none">
+    <div class="modalbox briefbox">
+      <div class="modalhead"><span>🖼️ Mockups pr. placering</span><button class="modalx" id="mockupsClose">✕</button></div>
+      <div class="modalbody">
+        <p class="mockhint">Upload et foto/mockup for hver placering. Det vises på kortene og kan vedhæftes automatisk når du sender en mail om netop den placering.</p>
+        <div id="mockupList"></div>
       </div>
     </div>
   </div>

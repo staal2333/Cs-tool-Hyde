@@ -5,16 +5,18 @@ import { effectiveState } from '../lib/state.js';
 import { loadLogs } from '../lib/log.js';
 import { googleConfigured, loadGoogle } from '../lib/google.js';
 import { loadThreads, loadLastSync } from '../lib/sync.js';
+import { loadImageIndex } from '../lib/placements.js';
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return;
   try {
-    const [contacts, state, logs, google, threads, lastSync] = await Promise.all([
-      effectiveContacts(), effectiveState(), loadLogs(), loadGoogle(), loadThreads(), loadLastSync(),
+    const [contacts, state, logs, google, threads, lastSync, placementImages] = await Promise.all([
+      effectiveContacts(), effectiveState(), loadLogs(), loadGoogle(), loadThreads(), loadLastSync(), loadImageIndex(),
     ]);
     return res.status(200).json({
       contacts,
       placements: DATA.placements || {},
+      placementImages: placementImages || [],
       followupDaysDefault: DATA.followupDaysDefault || 5,
       generated: DATA.generated || null,
       hasAI: Boolean(process.env.ANTHROPIC_API_KEY),
