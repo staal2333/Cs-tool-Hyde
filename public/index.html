@@ -31,6 +31,7 @@
         <div class="hbtns">
           <button class="hbtn hbtn-sun" id="btnBrief">☀️ Dagens plan</button>
           <button class="hbtn hbtn-primary" id="btnAdd">➕ Tilføj kunde</button>
+          <button class="hbtn" id="btnClassify">🏷️ Auto-tag indkøb</button>
           <button class="hbtn" id="btnExport">📥 Eksportér status (CSV)</button>
           <button class="hbtn" id="btnSummary">📋 Kopiér opsummering</button>
           <label>Opfølgning efter <input id="thr" type="number" value="5" min="1"> dage</label>
@@ -63,6 +64,12 @@
           <option value="Booket">Kun booket</option>
           <option value="Nej tak">Kun nej tak</option>
         </select>
+        <select id="fbuyer">
+          <option value="">Alt medieindkøb</option>
+          <option value="bureau">🏢 Kun bureau</option>
+          <option value="selv">🤝 Kun selv</option>
+          <option value="ukendt">❓ Kun ukendt</option>
+        </select>
       </div>
 
       <div id="list"></div>
@@ -79,6 +86,8 @@
         <div class="fldrow">
           <label class="fld"><span>Temperatur</span>
             <select id="f-temp"><option value="kold">🔵 Kold</option><option value="varm">🔥 Varm</option></select></label>
+          <label class="fld"><span>Medieindkøb</span>
+            <select id="f-buyer"><option value="ukendt">❓ Ukendt</option><option value="bureau">🏢 Mediebureau</option><option value="selv">🤝 Selv (in-house)</option></select></label>
           <label class="fld"><span>Anbefalet placering</span>
             <select id="f-placement"></select></label>
         </div>

@@ -260,6 +260,13 @@ function contactMetaHTML(c){
   const bits = [c.person && esc(c.person), c.email && esc(c.email), c.phone && esc(c.phone)].filter(Boolean);
   return bits.length ? `<div class="cmeta">${bits.join(' · ')}</div>` : '';
 }
+const BUYER = { bureau:'🏢 Bureau', selv:'🤝 Selv', ukendt:'❓ Indkøb?' };
+const BUYER_CYCLE = { ukendt:'bureau', bureau:'selv', selv:'ukendt' };
+function buyerVal(c){ return c.buyer || 'ukendt'; }
+function buyerChip(c){
+  const b = buyerVal(c);
+  return `<button class="buyertag ${b} act-buyer" title="Klik for at skifte: Ukendt → Bureau → Selv">${BUYER[b]}</button>`;
+}
 function cardHTML(c){
   const r = rec(c.company);
   const st = r.status || 'Ikke kontaktet';
@@ -278,7 +285,7 @@ function cardHTML(c){
   return `<div class="card ${statusClass(st)}" data-company="${esc(c.company)}">
     <div class="chead">
       <div class="cbrand"><span class="brand">${esc(c.company)}</span>${c.custom?'<span class="tagcustom">egen</span>':''}${contactMetaHTML(c)}</div>
-      <div class="chead-r">${badge}
+      <div class="chead-r">${buyerChip(c)}${badge}
         <button class="iconbtn act-edit" title="Rediger kunde">✏️</button>
         <button class="iconbtn act-del" title="Slet kunde">🗑️</button>
       </div>
@@ -303,10 +310,11 @@ function cardHTML(c){
 function render(){
   const q = $('q').value.toLowerCase();
   const f = $('fil').value;
+  const fb = ($('fbuyer') && $('fbuyer').value) || '';
   let items = contactsForTab().filter(c=>{
     const hay = (c.company+' '+(c.subject||'')+' '+(c.segment||'')+' '+(c.person||'')+' '+(c.email||'')).toLowerCase();
     const st = rec(c.company).status || 'Ikke kontaktet';
-    return hay.includes(q) && (!f || st === f);
+    return hay.includes(q) && (!f || st === f) && (!fb || buyerVal(c) === fb);
   });
   $('list').innerHTML = items.map(cardHTML).join('');
   $('empty').style.display = items.length ? 'none' : '';
@@ -346,6 +354,16 @@ function bindCards(){
     if(editb) editb.addEventListener('click', ()=>openContactModal(company));
     const delb = el('.act-del', card);
     if(delb) delb.addEventListener('click', ()=>deleteContact(company));
+    const buyerb = el('.act-buyer', card);
+    if(buyerb) buyerb.addEventListener('click', async ()=>{
+      const c = DATA.contacts.find(x=>x.company===company);
+      const next = BUYER_CYCLE[buyerVal(c)];
+      c.buyer = next; // optimistic
+      buyerb.className = 'buyertag '+next+' act-buyer'; buyerb.textContent = BUYER[next];
+      const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'update', company, patch:{ buyer:next } }) });
+      if(res.status===401){ showGate(); return; }
+      const j = await res.json(); if(j.ok) DATA.contacts = j.contacts;
+    });
     const ai = el('.act-ai', card);
     if(ai) ai.addEventListener('click', ()=>askClaude(company, card, ai));
 
@@ -496,6 +514,8 @@ function bindGlobal(){
   $('btnLogout').addEventListener('click', async ()=>{
     await api('/api/logout', { method:'POST' }); location.reload();
   });
+  $('btnClassify').addEventListener('click', classifyContacts);
+  $('fbuyer').addEventListener('change', render);
   $('btnBrief').addEventListener('click', openBriefing);
   $('briefClose').addEventListener('click', closeBriefing);
   $('briefRefresh').addEventListener('click', loadBriefing);
@@ -563,6 +583,7 @@ function openContactModal(company){
   $('f-company').value = c ? c.company : '';
   $('f-company').disabled = !!c;
   $('f-temp').value = c ? (c.temp||'kold') : 'kold';
+  $('f-buyer').value = c ? (c.buyer||'ukendt') : 'ukendt';
   fillPlacementSelect($('f-placement'), c ? (c.placement||'') : '');
   $('f-segment').value = c ? (c.segment||'') : '';
   $('f-person').value  = c ? (c.person||'')  : '';
@@ -578,7 +599,7 @@ async function saveContact(){
   const company = $('f-company').value.trim();
   if(!company){ $('modalErr').textContent = 'Firma er påkrævet.'; return; }
   const fields = {
-    temp:$('f-temp').value, placement:$('f-placement').value, segment:$('f-segment').value,
+    temp:$('f-temp').value, buyer:$('f-buyer').value, placement:$('f-placement').value, segment:$('f-segment').value,
     person:$('f-person').value, email:$('f-email').value.trim(), phone:$('f-phone').value,
     subject:$('f-subject').value, body:$('f-body').value,
   };
@@ -608,6 +629,21 @@ async function restoreContact(company){
   const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'restore', company }) });
   const j = await res.json();
   if(j.ok){ DATA.contacts = j.contacts; render(); toast('↩️ "'+company+'" gendannet.', true); }
+}
+async function classifyContacts(){
+  if(!HAS_AI){ toast('AI er slået fra — tilføj ANTHROPIC_API_KEY.', false); return; }
+  if(!confirm('Lad Claude analysere alle kunder og sætte 🏢 Bureau / 🤝 Selv / ❓ Ukendt?\n\nDet er et kvalificeret gæt ud fra virksomhedstype — du kan rette manuelt bagefter (klik på en markering for at skifte).')) return;
+  const btn = $('btnClassify'); if(btn){ btn.disabled=true; btn.textContent='🏷️ Analyserer…'; }
+  toast('🏷️ Claude analyserer alle dine kunder…', true);
+  try{
+    const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'classify' }) });
+    if(res.status===401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ toast(j.message || 'Kunne ikke analysere.', false); return; }
+    DATA.contacts = j.contacts; render();
+    toast(`🏷️ Færdig: ${j.counts.bureau} bureau · ${j.counts.selv} selv · ${j.counts.ukendt} ukendt. Ret frit ved at klikke på en markering.`, true);
+  }catch(e){ toast('Netværksfejl.', false); }
+  finally{ if($('btnClassify')){ $('btnClassify').disabled=false; $('btnClassify').textContent='🏷️ Auto-tag indkøb'; } }
 }
 
 /* ---------- daily briefing ---------- */
