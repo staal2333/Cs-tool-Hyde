@@ -57,6 +57,7 @@ GØR ALDRIG:
 - INGEN procent-rabat ("54% under listepris"), ingen udråbstegn-salg, ingen buzzwords.
 - Ingen hårde lukkere som "skal jeg det?". Hold det åbent og uforpligtende.
 - ALDRIG udskyde tallene: skriv IKKE "jeg sender/vender gerne tilbage med størrelse, tal, pris eller detaljer hvis det har interesse". Tallene SKAL stå i selve mailen — ligesom i guldstandarden.
+- Henvis ALDRIG tallene til oplægget: skriv IKKE "jeg har vedhæftet oplægget med detaljerne / tallene / størrelse, eksponeringer og pris". Oplægget må KUN nævnes som "vores sommer-oplæg med alle placeringerne i juni & juli". Tallene for DENNE plads SKAL stå som tekst i mailen — i sætningen ovenfor.
 
 De 3 varianter skal alle være BLØDE, men variere let:
 1) Varm & personlig — relations-åbneren, tæt på guldstandarden.
