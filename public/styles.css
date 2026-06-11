@@ -283,3 +283,51 @@ header p{margin:6px 0 0;font-size:12.5px;color:#bccbe6;max-width:680px}
 .scentable tbody tr:hover{background:#f7f9fd}
 .dashnote{font-size:11.5px;color:var(--muted);margin-top:11px;line-height:1.4}
 @media(max-width:720px){.dashgrid{grid-template-columns:1fr}}
+
+/* ---------- mobile layout (feature 5) ---------- */
+/* Placed last so these overrides win over the component rules above. */
+@media(max-width:640px){
+  body{padding-bottom:48px}
+  .wrap{padding:0 13px}
+  header{padding:13px 0 11px}
+  header h1{font-size:18px}
+  header p{display:none}                 /* free up vertical space on phones */
+  .hbtns{gap:7px;margin-top:11px}
+  .hbtn{padding:7px 11px;font-size:12px}
+  /* Tab bar scrolls horizontally instead of stacking into many rows */
+  .tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:13px 0 6px;padding-bottom:4px;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;padding:8px 13px;font-size:13px}
+  .controls{flex-wrap:wrap;gap:8px}
+  #q{flex:1 1 100%}
+  #fil,#fbuyer{flex:1 1 calc(50% - 4px)}
+  .card{padding:15px 15px}
+  .winbox{margin-left:-15px;margin-right:-15px;padding-left:15px;padding-right:15px}
+  .subtxt{min-width:0}
+  /* Card actions become a tidy, thumb-friendly grid; copy + send sit side by side */
+  .row2{gap:8px}
+  .row2 .btn{flex:1 1 calc(50% - 4px);min-height:42px}
+  .row2 .st{flex:1 1 100%;min-height:42px}
+  .row2 .note{flex:1 1 100%}
+  .attachchk{flex:1 1 100%;justify-content:center;padding:5px 0}
+  .when{flex:1 1 100%}
+  .vacts .btn{flex:1 1 calc(50% - 4px);min-height:40px}
+  .logmsg{max-width:96%}
+  /* Dashboard / daily plan */
+  .kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:13px 13px}
+  .kpi .num{font-size:21px}
+  .stagerow{grid-template-columns:92px 1fr 58px;gap:7px;font-size:12px}
+  .scentable{font-size:11.5px}
+  .scentable th,.scentable td{padding:5px 4px}
+  /* Modals (incl. ☀️ Dagens plan) slide up as a near-full-height sheet */
+  .modal{padding:0;align-items:flex-end}
+  .modalbox,.briefbox{max-width:100%;max-height:94vh;border-radius:18px 18px 0 0}
+  .modalbody{padding:16px 16px}
+  .fldrow{gap:10px}
+  .fldrow .fld{flex:1 1 100%}
+  /* Mockups manager rows wrap on narrow screens */
+  .mockrow{flex-wrap:wrap}
+  .mockinfo{flex:1 1 calc(100% - 88px)}
+  .mockacts{flex:1 1 100%;justify-content:flex-end}
+}
