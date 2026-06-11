@@ -151,7 +151,18 @@ export default async function handler(req, res) {
       messages: [{ role: 'user', content: userMsg }],
     });
     const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-    const variants = parseVariants(text);
+    // Guarantee the figures are in every body — insert the sentence if the model dropped it.
+    const priceKey = pl && pl.price ? stripKr(pl.price) : null;
+    const variants = parseVariants(text).map((v) => {
+      if (numbersSentence && priceKey && !v.body.includes(priceKey)) {
+        const paras = v.body.split(/\n\s*\n/);
+        let idx = paras.findIndex((p) => (pl.name && p.includes(pl.name)) || /ledig plads|available/i.test(p));
+        if (idx === -1) idx = 0;
+        paras.splice(idx + 1, 0, numbersSentence);
+        v.body = paras.join('\n\n');
+      }
+      return v;
+    });
     if (!variants.length) return res.status(502).json({ error: 'parse_failed', message: 'Kunne ikke tolke svaret.' });
     return res.status(200).json({ ok: true, variants, placement: placName, scenario: scenarioKey });
   } catch (err) {
