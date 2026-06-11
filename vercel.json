@@ -5,5 +5,10 @@
       "memory": 512,
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/api/google/auth", "destination": "/api/google?action=auth" },
+    { "source": "/api/google/callback", "destination": "/api/google?action=callback" },
+    { "source": "/api/google/disconnect", "destination": "/api/google?action=disconnect" }
+  ]
 }
