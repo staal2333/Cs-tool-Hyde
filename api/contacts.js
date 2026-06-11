@@ -28,8 +28,9 @@ async function classifyAll() {
 
   const client = new Anthropic();
   const msg = await client.messages.create({
-    model: process.env.CLAUDE_MODEL || 'claude-opus-4-8',
-    max_tokens: 14000,
+    // Haiku: fast + cheap, plenty for tag+short-reason; keeps us under the function timeout.
+    model: process.env.CLASSIFY_MODEL || 'claude-haiku-4-5',
+    max_tokens: 10000,
     system: [{ type: 'text', text: CLASSIFY_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: lines }],
   });
