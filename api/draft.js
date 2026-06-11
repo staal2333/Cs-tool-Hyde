@@ -47,7 +47,7 @@ Sebastian
 GØR:
 - Start varmt og personligt. Brug fornavn hvis du har det ("Hej Dorthe,"), ellers "Hej,". Ved genåbning: "Lang tid siden — håber alt er godt hos jer."
 - Sig grunden ligefremt: "Grunden til jeg skriver: …"
-- TAG ALTID DE KONKRETE TAL MED i HVER variant — ligesom guldstandarden: størrelse (m²), eksponeringer/uge OG pris som "X i stedet for Y". Blød tone betyder venlig — IKKE vag eller uden tal. Skriv det roligt: "Den er 180 m², 385.000+ eksponeringer om ugen, og prisen er 90.000 i stedet for 135.331." ALDRIG procenter.
+- HVER variant SKAL selv indeholde tallene i én rolig sætning — brug denne form med de RIGTIGE tal for placeringen: "Den er [m²] m², [eksponeringer]+ eksponeringer om ugen, og prisen er [pris] i stedet for [normalpris]." Skriv tallene DIREKTE i mailen. ALDRIG procenter.
 - Nævn gerne (når det passer): "Jeg har vedhæftet vores sommer-oplæg med alle placeringerne i juni & juli."
 - Slut med en BLØD, åben invitation: "Er det noget, der kunne passe ind i jeres planer hen over sommeren?" / "Sig endelig til — også hvis det først er aktuelt senere."
 - Signatur: "Bedste hilsner" og så "Sebastian".
@@ -56,6 +56,7 @@ GØR ALDRIG:
 - INGEN knaphed eller pres: ikke "går hurtigt", "first come, first served", "jeg holder pladsen til på fredag", "skal jeg sætte navn på?".
 - INGEN procent-rabat ("54% under listepris"), ingen udråbstegn-salg, ingen buzzwords.
 - Ingen hårde lukkere som "skal jeg det?". Hold det åbent og uforpligtende.
+- ALDRIG udskyde tallene: skriv IKKE "jeg sender/vender gerne tilbage med størrelse, tal, pris eller detaljer hvis det har interesse". Tallene SKAL stå i selve mailen — ligesom i guldstandarden.
 
 De 3 varianter skal alle være BLØDE, men variere let:
 1) Varm & personlig — relations-åbneren, tæt på guldstandarden.
