@@ -47,7 +47,7 @@ Sebastian
 GØR:
 - Start varmt og personligt. Brug fornavn hvis du har det ("Hej Dorthe,"), ellers "Hej,". Ved genåbning: "Lang tid siden — håber alt er godt hos jer."
 - Sig grunden ligefremt: "Grunden til jeg skriver: …"
-- Nævn tallene ROLIGT og ligefremt: "Den er 180 m², 385.000+ eksponeringer om ugen, og prisen er 90.000 i stedet for 135.331." Pris ALTID som "X i stedet for Y" — ALDRIG procenter.
+- TAG ALTID DE KONKRETE TAL MED i HVER variant — ligesom guldstandarden: størrelse (m²), eksponeringer/uge OG pris som "X i stedet for Y". Blød tone betyder venlig — IKKE vag eller uden tal. Skriv det roligt: "Den er 180 m², 385.000+ eksponeringer om ugen, og prisen er 90.000 i stedet for 135.331." ALDRIG procenter.
 - Nævn gerne (når det passer): "Jeg har vedhæftet vores sommer-oplæg med alle placeringerne i juni & juli."
 - Slut med en BLØD, åben invitation: "Er det noget, der kunne passe ind i jeres planer hen over sommeren?" / "Sig endelig til — også hvis det først er aktuelt senere."
 - Signatur: "Bedste hilsner" og så "Sebastian".
