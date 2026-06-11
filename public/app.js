@@ -14,7 +14,7 @@ let GMAIL = { configured:false, connected:false, lastSync:null };
 let PLACEMENT_IMAGES = new Set();   // placement names that have a mockup
 let MOCK_BUST = 0;                  // bumped after upload/delete to bust <img> cache
 let HAS_AI = false;
-let curTab = 'kold';
+let curTab = 'dash';
 
 const $ = (id) => document.getElementById(id);
 const el = (sel, root=document) => root.querySelector(sel);
@@ -207,7 +207,8 @@ function bindVariants(company, card){
       const threadId = hasReply(company) ? (THREADS[company] && THREADS[company].threadId) : null;
       const plac = (el('.d-placement', card) || {}).value || c.placement;
       const attachPlacement = hasMockup(plac) ? plac : null;
-      sendMail(company, { to:contactEmail(c), subject:subj, body:bodyt, status:'Sendt', threadId, attachPlacement }, e.target);
+      const scenario = (el('.d-scenario', card) || {}).value || defaultScenario(c);
+      sendMail(company, { to:contactEmail(c), subject:subj, body:bodyt, status:'Sendt', threadId, attachPlacement, scenario }, e.target);
     });
     el('.act-vgmail', v).addEventListener('click', ()=>{ window.open(gmailComposeUrlRaw(contactEmail(c), subj, bodyt), '_blank'); markSent(); });
     el('.act-vsave', v).addEventListener('click', async (e)=>{
@@ -350,6 +351,16 @@ function cardHTML(c){
   </div>`;
 }
 function render(){
+  const isDash = curTab === 'dash';
+  const ctrls = document.querySelector('.controls');
+  if(ctrls) ctrls.style.display = isDash ? 'none' : '';
+  $('bar').style.display = isDash ? 'none' : '';
+  if(isDash){
+    $('list').innerHTML = dashboardHTML();
+    $('empty').style.display = 'none';
+    renderCounts();
+    return;
+  }
   const q = $('q').value.toLowerCase();
   const f = $('fil').value;
   const fb = ($('fbuyer') && $('fbuyer').value) || '';
@@ -402,7 +413,7 @@ function bindCards(){
       const threadId = hasReply(company) ? (THREADS[company] && THREADS[company].threadId) : null;
       const chk = el('.act-attach', card);
       const attachPlacement = (chk && chk.checked && hasMockup(c.placement)) ? c.placement : null;
-      sendMail(company, { to:contactEmail(c), subject, body, status, threadId, attachPlacement }, e.target);
+      sendMail(company, { to:contactEmail(c), subject, body, status, threadId, attachPlacement, scenario: defaultScenario(c) }, e.target);
     });
     const editb = el('.act-edit', card);
     if(editb) editb.addEventListener('click', ()=>openContactModal(company));
@@ -535,6 +546,78 @@ function renderBar(){
     `<span>⬜ Mangler: <b>${n['Ikke kontaktet']||0}</b></span>`;
 }
 
+/* ---------- dashboard (overblik) ---------- */
+function priceKr(name){ const p = DATA.placements[name]; if(!p) return 0; return parseInt(String(p.price||'').replace(/\D/g,''))||0; }
+function fmtKr(n){ return Math.round(n).toLocaleString('da-DK') + ' kr.'; }
+const SCEN_LABEL = Object.fromEntries(SCEN);
+function scenarioFor(c){ return rec(c.company).scenario || defaultScenario(c); }
+function dashboardHTML(){
+  const cs = DATA.contacts;
+  const statusOf = c => rec(c.company).status || 'Ikke kontaktet';
+  const counts = {}; STATUSES.forEach(s=>counts[s]=0);
+  cs.forEach(c=>{ counts[statusOf(c)]++; });
+  const total = cs.length;
+  const contacted = total - counts['Ikke kontaktet'];
+  const responded = cs.filter(c=> hasReply(c.company) || statusOf(c)==='Booket').length;
+  const booked = counts['Booket'];
+  const replyRate = contacted ? Math.round(responded/contacted*100) : 0;
+  const bookRate  = contacted ? Math.round(booked/contacted*100) : 0;
+
+  // Pipeline value: open opportunities vs. won.
+  const open = new Set(['Sendt','Opfølgning sendt','Svar modtaget']);
+  let pipeline=0, wonVal=0;
+  cs.forEach(c=>{ const st=statusOf(c), v=priceKr(c.placement);
+    if(open.has(st)) pipeline+=v; else if(st==='Booket') wonVal+=v; });
+
+  // Conversion per mail scenario (tracked scenario, else recommended one).
+  const scen = {}; SCEN.forEach(([v,l])=>scen[v]={label:l,sent:0,svar:0,book:0});
+  cs.forEach(c=>{ const st=statusOf(c); if(st==='Ikke kontaktet') return;
+    const s=scenarioFor(c); if(!scen[s]) scen[s]={label:SCEN_LABEL[s]||s,sent:0,svar:0,book:0};
+    scen[s].sent++; if(hasReply(c.company)||st==='Booket') scen[s].svar++; if(st==='Booket') scen[s].book++; });
+  const scenRows = Object.values(scen).filter(s=>s.sent>0).sort((a,b)=>b.sent-a.sent);
+
+  const kpi = (num, lbl, sub, cls='') => `<div class="kpi ${cls}"><div class="num">${num}</div><div class="lbl">${lbl}</div>${sub?`<div class="ksub">${sub}</div>`:''}</div>`;
+
+  const stageMax = Math.max(1, ...STATUSES.map(s=>counts[s]));
+  const stageColor = { 'Ikke kontaktet':'#c2c8d2','Sendt':'#5b8def','Opfølgning sendt':'#e0892b','Svar modtaget':'#23a96c','Booket':'#b8860b','Nej tak':'#9aa3b5' };
+  const stages = STATUSES.map(s=>{
+    const n = counts[s]; const w = Math.round(n/stageMax*100);
+    const pct = total ? Math.round(n/total*100) : 0;
+    return `<div class="stagerow"><span class="stagelbl">${esc(s)}</span>
+      <span class="stagetrack"><span class="stagebar" style="width:${w}%;background:${stageColor[s]}"></span></span>
+      <span class="stagenum">${n} <small>· ${pct}%</small></span></div>`;
+  }).join('');
+
+  const scenTable = scenRows.length ? `<table class="scentable">
+    <thead><tr><th>Scenarie</th><th>Sendt</th><th>Svar</th><th>Booket</th><th>Svar%</th><th>Booket%</th></tr></thead>
+    <tbody>${scenRows.map(r=>`<tr>
+      <td>${esc(r.label)}</td><td>${r.sent}</td><td>${r.svar}</td><td>${r.book}</td>
+      <td><b>${Math.round(r.svar/r.sent*100)}%</b></td><td>${Math.round(r.book/r.sent*100)}%</td>
+    </tr>`).join('')}</tbody></table>`
+    : '<div class="logempty">Ingen sendte mails endnu — send nogle mails for at se konvertering pr. scenarie.</div>';
+
+  return `<div class="dash">
+    <div class="kpis">
+      ${kpi(replyRate+'%', 'Svarprocent', `${responded} svar af ${contacted} kontaktet`, 'kpi-green')}
+      ${kpi(bookRate+'%', 'Booket-rate', `${booked} booket`, 'kpi-gold')}
+      ${kpi(fmtKr(pipeline), 'Pipeline-værdi', 'åbne muligheder (late sale)', 'kpi-blue')}
+      ${kpi(fmtKr(wonVal), 'Booket-værdi', 'vundet (late sale)', 'kpi-gold')}
+      ${kpi(contacted+'/'+total, 'Kontaktet', `${counts['Ikke kontaktet']} mangler`)}
+    </div>
+    <div class="dashgrid">
+      <div class="dashcard">
+        <div class="dashtitle">Kunder pr. stadie</div>
+        <div class="stagebars">${stages}</div>
+      </div>
+      <div class="dashcard">
+        <div class="dashtitle">Konvertering pr. mail-scenarie</div>
+        ${scenTable}
+        <div class="dashnote">Scenarie = det sendte scenarie (spores ved 📤 Send) eller det anbefalede ud fra segmentet.</div>
+      </div>
+    </div>
+  </div>`;
+}
+
 /* ---------- export / summary ---------- */
 function exportCSV(){
   const rows = [['Kunde','Temp','Anbefalet placering','Segment','Status','Dato','Note']];
@@ -631,14 +714,14 @@ async function runSync(){
 /* ---------- send directly via Gmail ---------- */
 function canSend(c){ return GMAIL.connected && !!contactEmail(c); }
 async function sendMail(company, opts, btn){
-  const { to, subject, body, status, threadId, attachPlacement } = opts;
+  const { to, subject, body, status, threadId, attachPlacement, scenario } = opts;
   if(!to){ toast('Ingen email på kunden — tilføj en email først (✏️).', false); return; }
   if(!body){ toast('Intet mailudkast at sende — skriv en mail først.', false); return; }
   const attachNote = attachPlacement ? ' (mockup vedhæftes)' : '';
   if(!confirm('Send mailen direkte til '+to+' nu?'+attachNote)) return;
   const o = btn.textContent; btn.disabled = true; btn.textContent = '📤 Sender…';
   try{
-    const res = await api('/api/send', { method:'POST', body: JSON.stringify({ company, to, subject, body, status, threadId, attachPlacement }) });
+    const res = await api('/api/send', { method:'POST', body: JSON.stringify({ company, to, subject, body, status, threadId, attachPlacement, scenario }) });
     if(res.status === 401){ showGate(); return; }
     const j = await res.json();
     if(!res.ok){ toast(j.message || 'Kunne ikke sende.', false); btn.disabled=false; btn.textContent=o; return; }

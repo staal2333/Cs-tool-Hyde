@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'method_not_allowed' });
   }
 
-  const { company, to, subject, body, threadId, status, attachPlacement } = req.body || {};
+  const { company, to, subject, body, threadId, status, attachPlacement, scenario } = req.body || {};
   if (!company || !to || !body) {
     return res.status(400).json({ error: 'bad_request', message: 'Mangler modtager, emne eller tekst.' });
   }
@@ -58,7 +58,9 @@ export default async function handler(req, res) {
   }
 
   const newStatus = status || 'Sendt';
-  const rec = await applyPatch(company, { status: newStatus, date: todayDK() });
+  const patch = { status: newStatus, date: todayDK() };
+  if (scenario) patch.scenario = scenario; // tracked for per-scenario conversion stats
+  const rec = await applyPatch(company, patch);
   // Log the outgoing mail so it feeds dialogue history + tone learning.
   try { await appendLog(company, 'mig', String(body).slice(0, 1500)); } catch {}
 
