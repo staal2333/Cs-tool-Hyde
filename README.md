@@ -1,11 +1,21 @@
 # Hyde Media — Outreach (Vercel)
 
-Outreach-værktøj til kold/varm outreach + opfølgninger. Nu med:
+Outreach-værktøj til kold/varm outreach + opfølgninger. Funktioner:
 
-- **Server-side lagring** (Upstash Redis) — din status gemmes i skyen og deles på tværs af enheder.
-- **Adgangskode** foran hele appen (data ligger bag API'et, så `data.json` ikke kan hentes offentligt).
-- **Win-the-customer-agent** i Opfølgning-fanen: regelbaserede forslag altid + en **🤖 Spørg Claude**-knap til dybere, personlige forslag.
+- **📊 Overblik (forside)** — KPI'er: svarprocent, booket-rate, pipeline- & booket-værdi, kunder pr. stadie og konvertering pr. mail-scenarie.
+- **AI-mailudkast** — 3 forslag i din tone pr. kunde (scenarie/placering/sprog), via Claude.
+- **📤 Send direkte via Gmail** — ét klik sender udkastet, sætter status + dato automatisk og tråder svar.
+- **⏰ Opfølgnings-radar** — flagger hvor længe siden sidste mail (🟠 forfalden / 🔴 for længe) og sorterer de mest forsinkede øverst.
+- **🖼️ Mockups pr. placering** — upload ét foto pr. placering; vises på kort og vedhæftes mailen.
+- **🗺️ Kort** — de 6 placeringer på et OpenStreetMap-kort med detaljer pr. markør.
+- **📍 Område- og 🏷️ tag-filtre** — segmentér kunder på placeringsområde eller frie tags.
+- **🏷️ Auto-tag medieindkøb** — Claude klassificerer Bureau / Selv / Ukendt.
+- **Gmail-sync** — henter svar (auto-svar filtreres fra), opdaterer status og logger dialog.
+- **Win-the-customer-agent** + **☀️ Dagens plan** — regelbaserede forslag + Claude-prioritering.
+- **Server-side lagring** (Upstash Redis), delt på tværs af enheder, bag en **adgangskode**.
 - **CSV-status importeret** fra `hyde_status.csv` som udgangspunkt (`seed.json`).
+
+> **Gmail-afsendelse kræver send-scope.** Efter denne version skal du trykke **"🔗 Forbind Gmail"** igen én gang, så appen får tilladelse til at *sende* (ikke kun læse). OAuth-scope er nu `gmail.readonly` + `gmail.send`.
 
 ## Struktur
 
@@ -13,9 +23,11 @@ Outreach-værktøj til kold/varm outreach + opfølgninger. Nu med:
 public/            statiske filer (login + app) — serveres af Vercel
   index.html, app.js, styles.css
 api/               serverless functions
-  login.js logout.js data.js state.js suggest.js
-lib/               delt kode (auth, redis, state, data)
-data.json          kontakter + mailudkast (IKKE offentlig)
+  login logout data state suggest draft send sync google
+  contacts briefing log placements
+lib/               delt kode (auth, redis, state, data, contacts, log,
+  gmail, google, sync, sync-core, placements)
+data.json          kontakter + mailudkast + placeringer m. koordinater (IKKE offentlig)
 seed.json          startstatus fra CSV (IKKE offentlig)
 ```
 
