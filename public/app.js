@@ -133,6 +133,19 @@ function angleFor(c){
 function hasReply(company){ const t=THREADS[company]; const st=rec(company).status||''; return (t && !t.auto) || st==='Svar modtaget'; }
 function replyTime(company){ const t=THREADS[company]; if(t && t.date) return t.date; const d=parseDate(rec(company).date); return d?d.getTime():0; }
 function contactEmail(c){ return c.email || ''; }
+/* ---------- tags & area segmentation ---------- */
+function areaOf(c){ const p = c.placement && DATA.placements[c.placement]; return (p && p.area) || ''; }
+function allAreas(){ return [...new Set(Object.values(DATA.placements||{}).map(p=>p.area).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'da')); }
+function allTags(){ const s=new Set(); DATA.contacts.forEach(c=>(c.tags||[]).forEach(t=>s.add(t))); return [...s].sort((a,b)=>a.localeCompare(b,'da')); }
+function tagsHTML(c){ const t=c.tags||[]; if(!t.length) return ''; return `<div class="tagrow">${t.map(x=>`<span class="ctag">${esc(x)}</span>`).join('')}</div>`; }
+function populateFilters(){
+  const fa=$('farea'), ft=$('ftag');
+  if(fa){ const cur=fa.value; fa.innerHTML='<option value="">📍 Alle områder</option>'+allAreas().map(a=>`<option ${a===cur?'selected':''}>${esc(a)}</option>`).join(''); }
+  if(ft){ const cur=ft.value; const tags=allTags();
+    ft.innerHTML='<option value="">🏷️ Alle tags</option>'+tags.map(t=>`<option ${t===cur?'selected':''}>${esc(t)}</option>`).join('');
+    ft.style.display = tags.length ? '' : 'none';
+  }
+}
 function contactsForTab(){
   if(curTab === 'opfolg') return DATA.contacts.filter(isDue).sort((a,b)=>daysSince(rec(b.company).date)-daysSince(rec(a.company).date));
   if(curTab === 'svar') return DATA.contacts.filter(c=>hasReply(c.company)).sort((a,b)=>replyTime(b.company)-replyTime(a.company));
@@ -330,6 +343,7 @@ function cardHTML(c){
       </div>
     </div>
     ${buyerReasonHTML(c)}
+    ${tagsHTML(c)}
     ${subject ? `<div class="subrow"><span class="sublbl">Emne</span><span class="subtxt subj">${esc(subject)}</span>
       <button class="btn small act-copysub">Kopiér emne</button></div>` : ''}
     ${body ? `<div class="body">${esc(body)}</div>` : ''}
@@ -365,13 +379,17 @@ function render(){
     renderCounts();
     return;
   }
+  populateFilters();
   const q = $('q').value.toLowerCase();
   const f = $('fil').value;
   const fb = ($('fbuyer') && $('fbuyer').value) || '';
+  const fa = ($('farea') && $('farea').value) || '';
+  const ft = ($('ftag') && $('ftag').value) || '';
   let items = contactsForTab().filter(c=>{
-    const hay = (c.company+' '+(c.subject||'')+' '+(c.segment||'')+' '+(c.person||'')+' '+(c.email||'')).toLowerCase();
+    const hay = (c.company+' '+(c.subject||'')+' '+(c.segment||'')+' '+(c.person||'')+' '+(c.email||'')+' '+areaOf(c)+' '+(c.tags||[]).join(' ')).toLowerCase();
     const st = rec(c.company).status || 'Ikke kontaktet';
-    return hay.includes(q) && (!f || st === f) && (!fb || buyerVal(c) === fb);
+    return hay.includes(q) && (!f || st === f) && (!fb || buyerVal(c) === fb)
+      && (!fa || areaOf(c) === fa) && (!ft || (c.tags||[]).includes(ft));
   });
   $('list').innerHTML = items.map(cardHTML).join('');
   $('empty').style.display = items.length ? 'none' : '';
@@ -701,6 +719,8 @@ function bindGlobal(){
   });
   $('btnClassify').addEventListener('click', classifyContacts);
   $('fbuyer').addEventListener('change', render);
+  $('farea').addEventListener('change', render);
+  $('ftag').addEventListener('change', render);
   $('btnBrief').addEventListener('click', openBriefing);
   $('btnMockups').addEventListener('click', openMockups);
   $('mockupsClose').addEventListener('click', closeMockups);
@@ -794,6 +814,7 @@ function openContactModal(company){
   $('f-buyer').value = c ? (c.buyer||'ukendt') : 'ukendt';
   fillPlacementSelect($('f-placement'), c ? (c.placement||'') : '');
   $('f-segment').value = c ? (c.segment||'') : '';
+  $('f-tags').value    = c ? (c.tags||[]).join(', ') : '';
   $('f-person').value  = c ? (c.person||'')  : '';
   $('f-email').value   = c ? (c.email||'')   : '';
   $('f-phone').value   = c ? (c.phone||'')   : '';
@@ -806,10 +827,11 @@ function closeModal(){ $('modal').style.display='none'; }
 async function saveContact(){
   const company = $('f-company').value.trim();
   if(!company){ $('modalErr').textContent = 'Firma er påkrævet.'; return; }
+  const tags = $('f-tags').value.split(',').map(s=>s.trim()).filter(Boolean);
   const fields = {
     temp:$('f-temp').value, buyer:$('f-buyer').value, placement:$('f-placement').value, segment:$('f-segment').value,
     person:$('f-person').value, email:$('f-email').value.trim(), phone:$('f-phone').value,
-    subject:$('f-subject').value, body:$('f-body').value,
+    subject:$('f-subject').value, body:$('f-body').value, tags,
   };
   const btn = $('modalSave'); btn.disabled = true;
   try{

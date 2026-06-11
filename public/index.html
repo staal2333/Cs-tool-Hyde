@@ -77,6 +77,8 @@
           <option value="selv">🤝 Kun selv</option>
           <option value="ukendt">❓ Kun ukendt</option>
         </select>
+        <select id="farea"><option value="">📍 Alle områder</option></select>
+        <select id="ftag" style="display:none"><option value="">🏷️ Alle tags</option></select>
       </div>
 
       <div id="list"></div>
@@ -103,6 +105,7 @@
             <select id="f-placement"></select></label>
         </div>
         <label class="fld"><span>Segment / type</span><input id="f-segment" placeholder="Fx Første kontakt"></label>
+        <label class="fld"><span>Tags (kommasepareret)</span><input id="f-tags" placeholder="Fx B2B, restaurant, gavl"></label>
         <div class="fldrow">
           <label class="fld"><span>Kontaktperson</span><input id="f-person" placeholder="Fx Dorthe Hansen"></label>
           <label class="fld"><span>Email</span><input id="f-email" placeholder="navn@firma.dk"></label>

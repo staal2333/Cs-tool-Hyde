@@ -228,8 +228,10 @@ header p{margin:6px 0 0;font-size:12.5px;color:#bccbe6;max-width:680px}
 .vacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 
 /* ---------- media-buyer tag ---------- */
-#fbuyer{padding:12px;border:1px solid var(--line);border-radius:12px;font-size:14px;font-family:inherit;background:var(--card);box-shadow:var(--shadow-sm);cursor:pointer}
-#fbuyer:focus{outline:none;border-color:var(--accent)}
+#fbuyer,#farea,#ftag{padding:12px;border:1px solid var(--line);border-radius:12px;font-size:14px;font-family:inherit;background:var(--card);box-shadow:var(--shadow-sm);cursor:pointer}
+#fbuyer:focus,#farea:focus,#ftag:focus{outline:none;border-color:var(--accent)}
+.tagrow{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 10px}
+.ctag{font-size:11px;font-weight:700;color:#3a4a7a;background:#eef2fc;border:1px solid #dbe4f8;border-radius:7px;padding:2px 8px}
 .buyertag{font-size:11px;font-weight:700;border-radius:20px;padding:4px 10px;cursor:pointer;font-family:inherit;border:1px solid transparent;transition:filter .12s}
 .buyertag:hover{filter:brightness(.96)}
 .buyertag.bureau{background:#eae7fb;color:#4b34b8;border-color:#d8d2f5}
@@ -311,7 +313,7 @@ header p{margin:6px 0 0;font-size:12.5px;color:#bccbe6;max-width:680px}
   .tab{flex:0 0 auto;padding:8px 13px;font-size:13px}
   .controls{flex-wrap:wrap;gap:8px}
   #q{flex:1 1 100%}
-  #fil,#fbuyer{flex:1 1 calc(50% - 4px)}
+  #fil,#fbuyer,#farea,#ftag{flex:1 1 calc(50% - 4px)}
   .card{padding:15px 15px}
   .winbox{margin-left:-15px;margin-right:-15px;padding-left:15px;padding-right:15px}
   .subtxt{min-width:0}
