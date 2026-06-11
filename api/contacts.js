@@ -15,37 +15,49 @@ Begrundelsen: KORT (max ~12 ord, dansk). Referér til dialogen hvis den findes (
 Returnér PRÆCIS én linje pr. virksomhed, intet andet:
 <nummer>: <bureau|selv|ukendt> | <kort begrundelse>`;
 
+function dialogueLine(c, idx, logs) {
+  const dlg = (logs[c.company] || [])
+    .map((e) => `${e.who === 'kunde' ? 'Kunde' : 'Sebastian'}: ${e.text}`)
+    .join(' | ')
+    .replace(/\s+/g, ' ')
+    .slice(0, 380);
+  return `${idx + 1}. ${c.company}${dlg ? `  [DIALOG: ${dlg}]` : ''}`;
+}
+
 async function classifyAll() {
   const [contacts, logs] = await Promise.all([effectiveContacts(), loadLogs()]);
-  const lines = contacts.map((c, i) => {
-    const dlg = (logs[c.company] || [])
-      .map((e) => `${e.who === 'kunde' ? 'Kunde' : 'Sebastian'}: ${e.text}`)
-      .join(' | ')
-      .replace(/\s+/g, ' ')
-      .slice(0, 380);
-    return `${i + 1}. ${c.company}${dlg ? `  [DIALOG: ${dlg}]` : ''}`;
-  }).join('\n');
-
   const client = new Anthropic();
-  const msg = await client.messages.create({
-    // Haiku: fast + cheap, plenty for tag+short-reason; keeps us under the function timeout.
-    model: process.env.CLASSIFY_MODEL || 'claude-haiku-4-5',
-    max_tokens: 10000,
-    system: [{ type: 'text', text: CLASSIFY_SYSTEM, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: lines }],
-  });
-  const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-  const map = {};
+  const model = process.env.CLASSIFY_MODEL || 'claude-opus-4-8';
+
+  // Split into chunks and run Opus on each in PARALLEL — keeps quality high
+  // while wall-clock stays well under the function timeout.
+  const CHUNK = 50;
+  const chunks = [];
+  for (let i = 0; i < contacts.length; i += CHUNK) chunks.push(contacts.slice(i, i + CHUNK));
+
+  const partials = await Promise.all(chunks.map(async (chunk) => {
+    const lines = chunk.map((c, j) => dialogueLine(c, j, logs)).join('\n');
+    const msg = await client.messages.create({
+      model,
+      max_tokens: 4000,
+      system: [{ type: 'text', text: CLASSIFY_SYSTEM, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: lines }],
+    });
+    const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    const out = {};
+    for (const line of text.split(/\n/)) {
+      const m = line.match(/^\s*(\d+)\s*[:.)\-]\s*(bureau|selv|ukendt)\s*(?:[|\-–—:]\s*(.*))?$/i);
+      if (!m) continue;
+      const c = chunk[Number(m[1]) - 1];
+      if (!c) continue;
+      out[c.company] = { buyer: m[2].toLowerCase(), buyerReason: (m[3] || '').trim().slice(0, 160) };
+    }
+    return out;
+  }));
+
+  const map = Object.assign({}, ...partials);
   const counts = { bureau: 0, selv: 0, ukendt: 0 };
-  for (const line of text.split(/\n/)) {
-    const m = line.match(/^\s*(\d+)\s*[:.)\-]\s*(bureau|selv|ukendt)\s*(?:[|\-–—:]\s*(.*))?$/i);
-    if (!m) continue;
-    const c = contacts[Number(m[1]) - 1];
-    if (!c) continue;
-    const v = m[2].toLowerCase();
-    map[c.company] = { buyer: v, buyerReason: (m[3] || '').trim().slice(0, 160) };
-    counts[v] = (counts[v] || 0) + 1;
-  }
+  for (const v of Object.values(map)) counts[v.buyer] = (counts[v.buyer] || 0) + 1;
   await bulkSetBuyer(map);
   return counts;
 }
