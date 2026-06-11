@@ -48,6 +48,8 @@ header p{margin:6px 0 0;font-size:12.5px;color:#bccbe6;max-width:680px}
 .bar{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:13px 16px;margin:8px 0 4px;font-size:13px;display:flex;gap:10px 22px;flex-wrap:wrap;box-shadow:var(--shadow-sm)}
 .bar span{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-weight:600}
 .bar b{color:var(--brand);font-weight:800}
+.bar span.bar-hot{color:#b02a2a}
+.bar span.bar-hot b{color:#b02a2a}
 
 /* ---------- controls ---------- */
 .controls{display:flex;gap:9px;margin:12px 0}
@@ -69,6 +71,10 @@ header p{margin:6px 0 0;font-size:12.5px;color:#bccbe6;max-width:680px}
 .brand{font-weight:800;font-size:16.5px;letter-spacing:-.2px}
 .badge{font-size:11px;font-weight:600;color:#5a6580;background:#eef2f9;padding:4px 10px;border-radius:20px;border:1px solid #e4e9f3}
 .badge.due{background:var(--warn-bg);color:#9a5a12;border-color:#f4dcc0}
+.badge.due.hot{background:#fdeaea;color:#b02a2a;border-color:#f3c4c4}
+.card.fu-due::before{background:linear-gradient(#f0b357,#d9822b)}
+.card.fu-hot::before{background:linear-gradient(#e85d5d,#c22d2d)}
+.card.fu-hot{border-color:#f0c9c9}
 
 /* subject row */
 .subrow{display:flex;align-items:center;gap:9px;background:#f7f9fd;border:1px solid var(--line-2);border-radius:11px;padding:9px 12px;margin-bottom:11px;flex-wrap:wrap}

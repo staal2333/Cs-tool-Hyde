@@ -50,6 +50,13 @@ function isDue(c){
   const r = rec(c.company);
   return (r.status === 'Sendt' || r.status === 'Opfølgning sendt') && daysSince(r.date) >= followupDays();
 }
+// Follow-up radar: days since the last mail + an urgency tier.
+function fuTier(days){
+  const t = followupDays();
+  if(days >= t * 2) return 'hot';   // way overdue
+  if(days >= t)     return 'due';   // due now
+  return '';
+}
 
 /* ---------- helpers ---------- */
 function statusClass(st){
@@ -288,9 +295,15 @@ function cardHTML(c){
   const openPanel = isFu || curTab === 'svar';
   const subject = isFu ? c.fuSubject : c.subject;
   const body = isFu ? c.fuBody : c.body;
+  const fuDays = daysSince(r.date);
+  const fuT = isFu ? fuTier(fuDays) : '';
   let badge;
   if(curTab === 'svar') badge = `<span class="badge reply">💬 ${esc(st)}${r.date?' · '+esc(r.date):''}</span>`;
-  else if(isFu) badge = `<span class="badge due">sendt for ${daysSince(r.date)} dage siden</span>`;
+  else if(isFu){
+    const flag = fuT === 'hot' ? '🔴' : '🟠';
+    const ctx = st === 'Opfølgning sendt' ? 'opfulgt' : 'sendt';
+    badge = `<span class="badge due ${fuT}">${flag} ${ctx} for ${fuDays} dage siden</span>`;
+  }
   else badge = `<span class="badge">${esc(c.segment||'')}${c.placement ? ' · '+esc(c.placement) : ''}</span>`;
   const opts = STATUSES.map(s => `<option ${s===st?'selected':''}>${s}</option>`).join('');
   const copyLabel = isFu ? '📋 Kopiér opfølgning' : '📋 Kopiér mail';
@@ -298,7 +311,7 @@ function cardHTML(c){
     ? `<button class="btn small act-gmail" title="Åbn i Gmail med modtager udfyldt">✉️ Skriv i Gmail</button>` : '';
   const sendBtn = (body && canSend(c))
     ? `<button class="btn small act-send" title="Send mailen direkte via Gmail og sæt status">📤 Send</button>` : '';
-  return `<div class="card ${statusClass(st)}" data-company="${esc(c.company)}">
+  return `<div class="card ${statusClass(st)}${fuT ? ' fu-'+fuT : ''}" data-company="${esc(c.company)}">
     <div class="chead">
       <div class="cbrand"><span class="brand">${esc(c.company)}</span>${c.custom?'<span class="tagcustom">egen</span>':''}${contactMetaHTML(c)}</div>
       <div class="chead-r">${buyerChip(c)}${badge}
@@ -490,8 +503,11 @@ function renderBar(){
     return;
   }
   if(curTab === 'opfolg'){
-    const n = DATA.contacts.filter(isDue).length;
-    $('bar').innerHTML = `<span><b>${n}</b> klar til opfølgning (sendt for ≥ ${followupDays()} dage siden, intet svar)</span>`;
+    const due = DATA.contacts.filter(isDue);
+    const hot = due.filter(c=>fuTier(daysSince(rec(c.company).date))==='hot').length;
+    $('bar').innerHTML =
+      `<span><b>${due.length}</b> klar til opfølgning (≥ ${followupDays()} dage siden sidste mail, intet svar)</span>`+
+      (hot ? `<span class="bar-hot">🔴 <b>${hot}</b> for længe siden (≥ ${followupDays()*2} dage) — tag dem først</span>` : '');
     return;
   }
   const pool = DATA.contacts.filter(c=>c.temp===curTab);
