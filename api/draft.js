@@ -105,6 +105,17 @@ export default async function handler(req, res) {
   const placName = body.placement || contact.placement;
   const pl = placementBlock(placName);
 
+  // Build the exact "numbers" sentence from real data so the model can't dodge it.
+  const stripKr = (s) => String(s || '').replace(/\s*kr\.?\s*$/i, '').trim();
+  const imprFmt = (s) => String(s || '').replace('K+', '.000+').replace('K', '.000');
+  let numbersSentence = null;
+  if (pl && pl.sqm) {
+    const price = stripKr(pl.price), list = stripKr(pl.list);
+    numbersSentence = lang === 'en'
+      ? `It's ${pl.sqm} m², ${imprFmt(pl.impr)} impressions a week, and the price is ${price}${list ? ' instead of ' + list : ''}.`
+      : `Den er ${pl.sqm} m², ${imprFmt(pl.impr)} eksponeringer om ugen, og prisen er ${price}${list ? ' i stedet for ' + list : ''}.`;
+  }
+
   const [tone, logs] = await Promise.all([loadTone(), loadLogs()]);
   const toneExamples = tone.slice(-6).map((e, i) => `${i + 1}. ${e.text}`).join('\n\n');
   const dialogue = (logs[contact.company] || [])
@@ -119,8 +130,11 @@ export default async function handler(req, res) {
     `SCENARIE: ${SCENARIOS[scenarioKey]}`,
     '',
     pl
-      ? `PLACERING: ${pl.name} (${pl.area}) — ${pl.sqm} m², ${pl.impr} eksponeringer/uge, late sale ${pl.price}${pl.list ? ' mod normalt ' + pl.list : ''}${pl.pct ? ' (~' + pl.pct + '% under listepris)' : ''}, periode ${pl.period}.`
+      ? `PLACERING: ${pl.name} (${pl.area}), periode ${pl.period}.`
       : `PLACERING: ${placName} (ingen detaljer — hold pris/tal ude).`,
+    numbersSentence
+      ? `\nPÅKRÆVET: Hver af de 3 mails SKAL indeholde denne sætning (placér den naturligt i teksten, gerne ordret) — den ER tallene, og en henvisning til vedhæftet oplæg erstatter den ALDRIG:\n"${numbersSentence}"`
+      : '',
     dialogue && scenarioKey === 'reply' ? `\nHIDTIDIG DIALOG (svar konkret på kundens seneste):\n${dialogue}` : '',
     toneExamples ? `\nSEBASTIANS EGNE BESKEDER (match denne tone):\n${toneExamples}` : '',
     '',
