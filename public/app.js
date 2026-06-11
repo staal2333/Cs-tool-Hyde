@@ -170,7 +170,8 @@ function draftPanelHTML(c){
     <div class="draft-out"></div>
   </div>`;
 }
-function variantHTML(v, i){
+function variantHTML(v, i, sendable){
+  const sendBtn = sendable ? `<button class="btn small act-vsend" title="Send dette udkast direkte via Gmail">📤 Send</button>` : '';
   return `<div class="variant" data-i="${i}">
     <div class="vhead"><span class="vangle">${esc(v.angle)}</span></div>
     <div class="vsubrow"><span class="sublbl">Emne</span><span class="v-subj subtxt">${esc(v.subject)}</span>
@@ -178,6 +179,7 @@ function variantHTML(v, i){
     <div class="v-body">${esc(v.body)}</div>
     <div class="vacts">
       <button class="btn small act-vcopy">📋 Kopiér mail</button>
+      ${sendBtn}
       <button class="btn small act-vgmail">✉️ Skriv i Gmail</button>
       <button class="btn small act-vsave">💾 Gem som udkast</button>
     </div>
@@ -191,6 +193,11 @@ function bindVariants(company, card){
     const markSent = ()=>{ const r=rec(company); if(!r.status||r.status==='Ikke kontaktet') setRec(company,{status:'Sendt',date:today()}).then(render); };
     el('.act-vcopysub', v).addEventListener('click', e=>copyText(subj, e.target));
     el('.act-vcopy', v).addEventListener('click', e=>{ copyText(bodyt, e.target); markSent(); });
+    const vsend = el('.act-vsend', v);
+    if(vsend) vsend.addEventListener('click', e=>{
+      const threadId = hasReply(company) ? (THREADS[company] && THREADS[company].threadId) : null;
+      sendMail(company, { to:contactEmail(c), subject:subj, body:bodyt, status:'Sendt', threadId }, e.target);
+    });
     el('.act-vgmail', v).addEventListener('click', ()=>{ window.open(gmailComposeUrlRaw(contactEmail(c), subj, bodyt), '_blank'); markSent(); });
     el('.act-vsave', v).addEventListener('click', async (e)=>{
       e.target.disabled = true;
@@ -215,7 +222,9 @@ async function generateDrafts(company, card){
     if(res.status===401){ showGate(); return; }
     const j = await res.json();
     if(!res.ok){ out.innerHTML='<div class="ai-err">'+esc(j.message||'Kunne ikke generere.')+'</div>'; return; }
-    out.innerHTML = j.variants.map(variantHTML).join('');
+    const c = DATA.contacts.find(x=>x.company===company);
+    const sendable = canSend(c);
+    out.innerHTML = j.variants.map((v,i)=>variantHTML(v,i,sendable)).join('');
     bindVariants(company, card);
   }catch(e){ out.innerHTML='<div class="ai-err">Netværksfejl.</div>'; }
   finally{ btn.disabled=false; btn.textContent=lbl; }
@@ -287,6 +296,8 @@ function cardHTML(c){
   const copyLabel = isFu ? '📋 Kopiér opfølgning' : '📋 Kopiér mail';
   const gmailBtn = contactEmail(c)
     ? `<button class="btn small act-gmail" title="Åbn i Gmail med modtager udfyldt">✉️ Skriv i Gmail</button>` : '';
+  const sendBtn = (body && canSend(c))
+    ? `<button class="btn small act-send" title="Send mailen direkte via Gmail og sæt status">📤 Send</button>` : '';
   return `<div class="card ${statusClass(st)}" data-company="${esc(c.company)}">
     <div class="chead">
       <div class="cbrand"><span class="brand">${esc(c.company)}</span>${c.custom?'<span class="tagcustom">egen</span>':''}${contactMetaHTML(c)}</div>
@@ -302,6 +313,7 @@ function cardHTML(c){
     ${threadHTML(c.company)}
     <div class="row2">
       ${body ? `<button class="btn act-copy" data-fu="${isFu?1:0}">${copyLabel}</button>` : ''}
+      ${sendBtn}
       ${gmailBtn}
       <select class="st">${opts}</select>
       ${(isFu||curTab==='svar') ? '' : '<input class="note" placeholder="Note…" value="'+esc(r.note||'')+'">'}
@@ -355,6 +367,16 @@ function bindCards(){
       const c = DATA.contacts.find(x=>x.company===company);
       window.open(gmailComposeUrl(c), '_blank');
       const r = rec(company); if(!r.status || r.status==='Ikke kontaktet') setRec(company,{status:'Sendt', date:today()}).then(render);
+    });
+    const sendb = el('.act-send', card);
+    if(sendb) sendb.addEventListener('click', e=>{
+      const c = DATA.contacts.find(x=>x.company===company);
+      const isFu = curTab === 'opfolg';
+      const subject = isFu ? c.fuSubject : c.subject;
+      const body = isFu ? c.fuBody : c.body;
+      const status = isFu ? 'Opfølgning sendt' : 'Sendt';
+      const threadId = hasReply(company) ? (THREADS[company] && THREADS[company].threadId) : null;
+      sendMail(company, { to:contactEmail(c), subject, body, status, threadId }, e.target);
     });
     const editb = el('.act-edit', card);
     if(editb) editb.addEventListener('click', ()=>openContactModal(company));
@@ -574,6 +596,25 @@ async function runSync(){
   } catch(e){ toast('Netværksfejl under synk.', false); }
   finally { if($('btnSync')){ $('btnSync').disabled=false; $('btnSync').textContent='🔄 Synk Gmail'; } }
 }
+/* ---------- send directly via Gmail ---------- */
+function canSend(c){ return GMAIL.connected && !!contactEmail(c); }
+async function sendMail(company, opts, btn){
+  const { to, subject, body, status, threadId } = opts;
+  if(!to){ toast('Ingen email på kunden — tilføj en email først (✏️).', false); return; }
+  if(!body){ toast('Intet mailudkast at sende — skriv en mail først.', false); return; }
+  if(!confirm('Send mailen direkte til '+to+' nu?')) return;
+  const o = btn.textContent; btn.disabled = true; btn.textContent = '📤 Sender…';
+  try{
+    const res = await api('/api/send', { method:'POST', body: JSON.stringify({ company, to, subject, body, status, threadId }) });
+    if(res.status === 401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ toast(j.message || 'Kunne ikke sende.', false); btn.disabled=false; btn.textContent=o; return; }
+    if(j.rec) STATE[company] = j.rec;
+    toast('📤 Sendt til '+to+' — status sat til “'+((j.rec&&j.rec.status)||status||'Sendt')+'”.', true);
+    render();
+  }catch(e){ toast('Netværksfejl under afsendelse.', false); btn.disabled=false; btn.textContent=o; }
+}
+
 // strip ?gmail=… from URL after handling
 function handleGmailReturn(){
   const p = new URLSearchParams(location.search);
