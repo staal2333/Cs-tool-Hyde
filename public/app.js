@@ -265,7 +265,12 @@ const BUYER_CYCLE = { ukendt:'bureau', bureau:'selv', selv:'ukendt' };
 function buyerVal(c){ return c.buyer || 'ukendt'; }
 function buyerChip(c){
   const b = buyerVal(c);
-  return `<button class="buyertag ${b} act-buyer" title="Klik for at skifte: Ukendt → Bureau → Selv">${BUYER[b]}</button>`;
+  const t = c.buyerReason ? esc(c.buyerReason) + ' — klik for at skifte' : 'Klik for at skifte: Ukendt → Bureau → Selv';
+  return `<button class="buyertag ${b} act-buyer" title="${t}">${BUYER[b]}</button>`;
+}
+function buyerReasonHTML(c){
+  if(!c.buyerReason) return '';
+  return `<div class="buyerwhy">🏷️ <b>${BUYER[buyerVal(c)].replace(/^.. /,'')}:</b> ${esc(c.buyerReason)}</div>`;
 }
 function cardHTML(c){
   const r = rec(c.company);
@@ -290,6 +295,7 @@ function cardHTML(c){
         <button class="iconbtn act-del" title="Slet kunde">🗑️</button>
       </div>
     </div>
+    ${buyerReasonHTML(c)}
     ${subject ? `<div class="subrow"><span class="sublbl">Emne</span><span class="subtxt subj">${esc(subject)}</span>
       <button class="btn small act-copysub">Kopiér emne</button></div>` : ''}
     ${body ? `<div class="body">${esc(body)}</div>` : ''}
@@ -358,11 +364,18 @@ function bindCards(){
     if(buyerb) buyerb.addEventListener('click', async ()=>{
       const c = DATA.contacts.find(x=>x.company===company);
       const next = BUYER_CYCLE[buyerVal(c)];
-      c.buyer = next; // optimistic
-      buyerb.className = 'buyertag '+next+' act-buyer'; buyerb.textContent = BUYER[next];
-      const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'update', company, patch:{ buyer:next } }) });
+      buyerb.className = 'buyertag '+next+' act-buyer'; buyerb.textContent = BUYER[next]; // optimistic
+      const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'update', company, patch:{ buyer:next, buyerReason:'Manuelt valgt af dig' } }) });
       if(res.status===401){ showGate(); return; }
-      const j = await res.json(); if(j.ok) DATA.contacts = j.contacts;
+      const j = await res.json();
+      if(j.ok){
+        DATA.contacts = j.contacts;
+        const c2 = DATA.contacts.find(x=>x.company===company);
+        const html = buyerReasonHTML(c2);
+        const why = el('.buyerwhy', card);
+        if(why){ if(html) why.outerHTML = html; else why.remove(); }
+        else if(html){ el('.chead', card).insertAdjacentHTML('afterend', html); }
+      }
     });
     const ai = el('.act-ai', card);
     if(ai) ai.addEventListener('click', ()=>askClaude(company, card, ai));

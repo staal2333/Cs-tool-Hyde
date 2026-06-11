@@ -1,40 +1,48 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '../lib/auth.js';
 import { addContact, updateContact, deleteContact, restoreContact, effectiveContacts, bulkSetBuyer } from '../lib/contacts.js';
+import { loadLogs } from '../lib/log.js';
 
-const CLASSIFY_SYSTEM = `Du er medieindkøbs-ekspert i det danske/nordiske annoncemarked. For hver virksomhed på listen skal du vurdere, hvordan de typisk køber annonceplads (out-of-home/medier):
-- "bureau" = køber medier gennem et MEDIEBUREAU (fx store internationale annoncører og koncerner: FMCG, bil, tele, store retailkæder, pharma, finans — de bruger næsten altid bureau).
-- "selv" = står selv for medieindkøb in-house/direkte (ofte mindre brands, DTC/challenger, startups, lokale virksomheder, mange B2B).
+const CLASSIFY_SYSTEM = `Du er medieindkøbs-ekspert i det danske/nordiske annoncemarked. For hver virksomhed skal du vurdere, hvordan de køber annonceplads (out-of-home/medier), OG give en kort begrundelse:
+- "bureau" = køber gennem et MEDIEBUREAU (typisk store internationale annoncører/koncerner: FMCG, bil, tele, store kæder, pharma, finans).
+- "selv" = står selv for medieindkøb in-house/direkte (ofte mindre brands, DTC/challenger, startups, lokale, en del B2B).
 - "ukendt" = reelt usikkert.
 
-Vær ærlig: brug "ukendt" når du ikke har et velbegrundet bud. Gæt ikke vildt.
+VIGTIGST: Hvis en virksomhed har [DIALOG: ...], så VÆGT dialogen HØJEST — den afslører ofte direkte hvordan de køber (fx "send det til vores bureau / vores mediebureau" → bureau; kontaktpersonen forhandler/beslutter selv → selv). Lad dialogen overtrumfe et navne-gæt.
 
-Returnér PRÆCIS én linje pr. virksomhed i formatet:
-<nummer>: bureau
-<nummer>: selv
-<nummer>: ukendt
-Intet andet — ingen forklaring.`;
+Begrundelsen: KORT (max ~12 ord, dansk). Referér til dialogen hvis den findes ("Henviser til deres bureau"), ellers virksomhedstypen ("Stor international annoncør"). Vær ærlig — brug "ukendt" hvis du ikke har et velbegrundet bud.
+
+Returnér PRÆCIS én linje pr. virksomhed, intet andet:
+<nummer>: <bureau|selv|ukendt> | <kort begrundelse>`;
 
 async function classifyAll() {
-  const contacts = await effectiveContacts();
-  const list = contacts.map((c, i) => `${i + 1}. ${c.company}`).join('\n');
+  const [contacts, logs] = await Promise.all([effectiveContacts(), loadLogs()]);
+  const lines = contacts.map((c, i) => {
+    const dlg = (logs[c.company] || [])
+      .map((e) => `${e.who === 'kunde' ? 'Kunde' : 'Sebastian'}: ${e.text}`)
+      .join(' | ')
+      .replace(/\s+/g, ' ')
+      .slice(0, 380);
+    return `${i + 1}. ${c.company}${dlg ? `  [DIALOG: ${dlg}]` : ''}`;
+  }).join('\n');
+
   const client = new Anthropic();
   const msg = await client.messages.create({
     model: process.env.CLAUDE_MODEL || 'claude-opus-4-8',
-    max_tokens: 8000,
+    max_tokens: 14000,
     system: [{ type: 'text', text: CLASSIFY_SYSTEM, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: list }],
+    messages: [{ role: 'user', content: lines }],
   });
   const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
   const map = {};
   const counts = { bureau: 0, selv: 0, ukendt: 0 };
   for (const line of text.split(/\n/)) {
-    const m = line.match(/^\s*(\d+)\s*[:.)\-]\s*(bureau|selv|ukendt)/i);
+    const m = line.match(/^\s*(\d+)\s*[:.)\-]\s*(bureau|selv|ukendt)\s*(?:[|\-–—:]\s*(.*))?$/i);
     if (!m) continue;
     const c = contacts[Number(m[1]) - 1];
     if (!c) continue;
     const v = m[2].toLowerCase();
-    map[c.company] = v;
+    map[c.company] = { buyer: v, buyerReason: (m[3] || '').trim().slice(0, 160) };
     counts[v] = (counts[v] || 0) + 1;
   }
   await bulkSetBuyer(map);
