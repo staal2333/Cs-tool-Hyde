@@ -715,7 +715,7 @@ function bindGlobal(){
     }
   });
   $('btnLogout').addEventListener('click', async ()=>{
-    await api('/api/logout', { method:'POST' }); location.reload();
+    await api('/api/login', { method:'POST', body: JSON.stringify({ action:'logout' }) }); location.reload();
   });
   $('btnClassify').addEventListener('click', classifyContacts);
   $('fbuyer').addEventListener('change', render);
