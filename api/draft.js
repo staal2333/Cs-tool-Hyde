@@ -16,6 +16,12 @@ const SCENARIOS = {
   reply:    'SVAR PÅ KUNDENS BESKED — tag afsæt i hvad de skrev, svar venligt og konkret på deres spørgsmål, og foreslå blødt næste skridt.',
 };
 
+// How the media-buying setup shifts WHAT we emphasise (tone stays soft/warm).
+const BUYER_ANGLE = {
+  bureau: 'Køber via MEDIEBUREAU — modtageren tænker som indkøber. Læg (blødt) vægt på det kommercielle: pris vs. normalpris, eksponeringer/rækkevidde, fleksibilitet, og at det er nemt at regne på. Spar på brand-poesien.',
+  selv: 'Står SELV for medieindkøb (brand in-house) — modtageren tænker brand. Læg (blødt) vægt på synlighed, hvordan placeringen klæder netop deres brand, og sommer-eksponeringen. Tallene er stadig med, men vinklen er brand/synlighed frem for indkøbs-jargon.',
+};
+
 function placementBlock(name) {
   const want = String(name || '').normalize('NFC');
   let key = name;
@@ -73,6 +79,8 @@ De 3 varianter skal alle være BLØDE, men variere let:
 3) Synlighed, blødt — fremhæv eksponeringen/placeringen lidt mere, men stadig roligt og uden pres.
 
 Selv ved "tag næste skridt" forbliver du varm og uforpligtende — en mild invitation, aldrig pres. Match sproget (dansk/engelsk). Hold mails korte (5-9 linjer).
+
+Hvis der står "VINKEL (medieindkøb)", så tilpas HVAD du fremhæver derefter — men behold den bløde, varme tone og guldstandard-strukturen helt uændret. Det er kun fokus der skifter, ikke stilen eller presniveauet.
 
 Svar i PRÆCIS dette format — intet andet, ingen indledning:
 
@@ -137,6 +145,7 @@ export default async function handler(req, res) {
     `Sprog: ${lang === 'en' ? 'ENGELSK' : 'DANSK'}`,
     '',
     `SCENARIE: ${SCENARIOS[scenarioKey]}`,
+    BUYER_ANGLE[contact.buyer] ? `\nVINKEL (medieindkøb): ${BUYER_ANGLE[contact.buyer]}` : '',
     '',
     pl
       ? `PLACERING: ${pl.name} (${pl.area}), periode ${pl.period}.`

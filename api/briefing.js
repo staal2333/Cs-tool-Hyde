@@ -31,6 +31,8 @@ Prioritér ALTID i denne rækkefølge:
 2. Forfaldne opfølgninger på sendte mails uden svar (jo længere tid + jo dyrere placering, jo vigtigere).
 3. Oplagte nye muligheder (varme kontakter der ikke er kontaktet endnu).
 
+Nogle kunder er tagget "bureau" (køber via mediebureau) eller "selv" (in-house). Tilpas handlingen: ved "bureau" → vinkl mod det kommercielle/indkøber (pris, rækkevidde, evt. send til deres bureau); ved "selv" → pitch brandet direkte til kunden (synlighed/brand-fit).
+
 Svar KORT og konkret på dansk i præcis dette format (Markdown):
 
 **I dag (kort):** <én sætning der opsummerer dagens fokus>
@@ -70,14 +72,15 @@ export default async function handler(req, res) {
       const t = threads[c.company];
       const price = placementPrice(c.placement);
 
+      const b = c.buyer && c.buyer !== 'ukendt' ? c.buyer : '';
       if (st === 'Svar modtaget' || (t && !t.auto && st !== 'Booket' && st !== 'Nej tak')) {
         counts.svar++;
-        replies.push({ k: c.company, temp: c.temp, plac: c.placement, kr: price, dage: daysSince(r.date), svar: (t?.snippet || '').slice(0, 180) });
+        replies.push({ k: c.company, temp: c.temp, plac: c.placement, kr: price, b, dage: daysSince(r.date), svar: (t?.snippet || '').slice(0, 180) });
       } else if ((st === 'Sendt' || st === 'Opfølgning sendt') && (daysSince(r.date) ?? 0) >= followupDays) {
         counts.forfaldne++;
-        due.push({ k: c.company, temp: c.temp, plac: c.placement, kr: price, status: st, dage: daysSince(r.date) });
+        due.push({ k: c.company, temp: c.temp, plac: c.placement, kr: price, b, status: st, dage: daysSince(r.date) });
       } else if (c.temp === 'varm' && st === 'Ikke kontaktet') {
-        warmNew.push({ k: c.company, plac: c.placement, segment: c.segment });
+        warmNew.push({ k: c.company, plac: c.placement, b, segment: c.segment });
       }
     }
 
@@ -87,13 +90,13 @@ export default async function handler(req, res) {
       `Pipeline pr. i dag: ${counts.total} kunder, ${counts.kontaktet} kontaktet, ${counts.booket} booket.`,
       '',
       `ÆGTE SVAR DER VENTER (${replies.length}):`,
-      replies.length ? replies.map((x) => `- ${x.k} [${x.temp}, ${x.plac || '—'}${x.kr ? ', ' + x.kr.toLocaleString('da-DK') + ' kr.' : ''}] — for ${x.dage ?? '?'} dage siden — "${x.svar}"`).join('\n') : '(ingen)',
+      replies.length ? replies.map((x) => `- ${x.k} [${x.temp}, ${x.plac || '—'}${x.kr ? ', ' + x.kr.toLocaleString('da-DK') + ' kr.' : ''}${x.b ? ', ' + x.b : ''}] — for ${x.dage ?? '?'} dage siden — "${x.svar}"`).join('\n') : '(ingen)',
       '',
       `FORFALDNE OPFØLGNINGER (${due.length}, sorteret efter værdi — top 25):`,
-      due.length ? due.slice(0, 25).map((x) => `- ${x.k} [${x.temp}, ${x.plac || '—'}${x.kr ? ', ' + x.kr.toLocaleString('da-DK') + ' kr.' : ''}] — ${x.status}, ${x.dage} dage siden`).join('\n') : '(ingen)',
+      due.length ? due.slice(0, 25).map((x) => `- ${x.k} [${x.temp}, ${x.plac || '—'}${x.kr ? ', ' + x.kr.toLocaleString('da-DK') + ' kr.' : ''}${x.b ? ', ' + x.b : ''}] — ${x.status}, ${x.dage} dage siden`).join('\n') : '(ingen)',
       '',
       `VARME, IKKE KONTAKTET (${warmNew.length} — top 20):`,
-      warmNew.length ? warmNew.slice(0, 20).map((x) => `- ${x.k} [${x.plac || '—'}, ${x.segment || '—'}]`).join('\n') : '(ingen)',
+      warmNew.length ? warmNew.slice(0, 20).map((x) => `- ${x.k} [${x.plac || '—'}, ${x.segment || '—'}${x.b ? ', ' + x.b : ''}]`).join('\n') : '(ingen)',
       '',
       'Giv mig dagens prioriterede plan.',
     ].join('\n');

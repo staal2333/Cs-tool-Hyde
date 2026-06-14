@@ -36,6 +36,7 @@
           <button class="hbtn hbtn-sun" id="btnBrief">☀️ Dagens plan</button>
           <button class="hbtn hbtn-primary" id="btnAdd">➕ Tilføj kunde</button>
           <button class="hbtn" id="btnClassify">🏷️ Auto-tag indkøb</button>
+          <button class="hbtn" id="btnScore">💰 Vurder budget</button>
           <button class="hbtn" id="btnMockups">🖼️ Mockups</button>
           <button class="hbtn" id="btnExport">📥 Eksportér status (CSV)</button>
           <button class="hbtn" id="btnSummary">📋 Kopiér opsummering</button>
@@ -79,6 +80,11 @@
         </select>
         <select id="farea"><option value="">📍 Alle områder</option></select>
         <select id="ftag" style="display:none"><option value="">🏷️ Alle tags</option></select>
+        <select id="sort">
+          <option value="">↕️ Standard rækkefølge</option>
+          <option value="booking">📅 Booking høj→lav</option>
+          <option value="money">💰 Budget høj→lav</option>
+        </select>
       </div>
 
       <div id="list"></div>
@@ -103,6 +109,8 @@
             <select id="f-buyer"><option value="ukendt">❓ Ukendt</option><option value="bureau">🏢 Mediebureau</option><option value="selv">🤝 Selv (in-house)</option></select></label>
           <label class="fld"><span>Anbefalet placering</span>
             <select id="f-placement"></select></label>
+          <label class="fld"><span>Budget/match (⭐)</span>
+            <select id="f-money"><option value="">– ikke sat</option><option value="1">★ 1</option><option value="2">★★ 2</option><option value="3">★★★ 3</option><option value="4">★★★★ 4</option><option value="5">★★★★★ 5</option></select></label>
         </div>
         <label class="fld"><span>Segment / type</span><input id="f-segment" placeholder="Fx Første kontakt"></label>
         <label class="fld"><span>Tags (kommasepareret)</span><input id="f-tags" placeholder="Fx B2B, restaurant, gavl"></label>

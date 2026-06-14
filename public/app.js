@@ -138,6 +138,34 @@ function areaOf(c){ const p = c.placement && DATA.placements[c.placement]; retur
 function allAreas(){ return [...new Set(Object.values(DATA.placements||{}).map(p=>p.area).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'da')); }
 function allTags(){ const s=new Set(); DATA.contacts.forEach(c=>(c.tags||[]).forEach(t=>s.add(t))); return [...s].sort((a,b)=>a.localeCompare(b,'da')); }
 function tagsHTML(c){ const t=c.tags||[]; if(!t.length) return ''; return `<div class="tagrow">${t.map(x=>`<span class="ctag">${esc(x)}</span>`).join('')}</div>`; }
+/* ---------- lead scoring ---------- */
+// 📅 Booking-sandsynlighed (1–5) — rule-based from engagement signals.
+function crmHeat(c){ const s=(c.crmStatus||'').toLowerCase(); if(s.includes('hot')) return 2; if(s.includes('warm')||s.includes('varm')) return 1; return 0; }
+function bookingScore(c){
+  const r = rec(c.company); const st = r.status || 'Ikke kontaktet';
+  if(st === 'Booket') return 5;
+  if(st === 'Nej tak') return 1;
+  let p = st==='Svar modtaget' ? 55 : st==='Opfølgning sendt' ? 30 : st==='Sendt' ? 20 : 10;
+  if(hasReply(c.company)) p += 25;
+  if(c.temp === 'varm') p += 15;
+  p += crmHeat(c) * 8;
+  if((LOGS[c.company]||[]).some(e=>e.who==='kunde')) p += 10;
+  if(st !== 'Ikke kontaktet' && r.date){ const d=daysSince(r.date), t=followupDays(); if(d<=t) p+=10; else if(d<=t*2) p+=5; }
+  const th = THREADS[c.company]; if(th && th.auto && !hasReply(c.company)) p -= 15;
+  p = Math.max(0, Math.min(100, p));
+  return Math.max(1, Math.min(5, Math.ceil(p/20)));
+}
+function moneyScore(c){ const n = Number(c.moneyScore); return n>=1 && n<=5 ? n : 0; }
+function stars(n){ n=Math.max(0,Math.min(5,n|0)); return '★★★★★'.slice(0,n)+'☆☆☆☆☆'.slice(0,5-n); }
+function scoreChips(c){
+  const b = bookingScore(c);
+  const m = moneyScore(c);
+  const bChip = `<span class="scorechip s${b}" title="📅 Booking-sandsynlighed (auto): ${b}/5">📅 <span class="stars">${stars(b)}</span></span>`;
+  const mChip = m
+    ? `<span class="scorechip s${m}" title="💰 Budget/outdoor-match (Claude): ${m}/5${c.moneyReason?' — '+esc(c.moneyReason):''}">💰 <span class="stars">${stars(m)}</span></span>`
+    : `<span class="scorechip none" title="Budget ikke vurderet endnu — tryk 💰 Vurder budget">💰 <span class="stars">– – – – –</span></span>`;
+  return `<div class="scorerow">${bChip}${mChip}</div>`;
+}
 function populateFilters(){
   const fa=$('farea'), ft=$('ftag');
   if(fa){ const cur=fa.value; fa.innerHTML='<option value="">📍 Alle områder</option>'+allAreas().map(a=>`<option ${a===cur?'selected':''}>${esc(a)}</option>`).join(''); }
@@ -343,6 +371,7 @@ function cardHTML(c){
       </div>
     </div>
     ${buyerReasonHTML(c)}
+    ${scoreChips(c)}
     ${tagsHTML(c)}
     ${subject ? `<div class="subrow"><span class="sublbl">Emne</span><span class="subtxt subj">${esc(subject)}</span>
       <button class="btn small act-copysub">Kopiér emne</button></div>` : ''}
@@ -391,6 +420,9 @@ function render(){
     return hay.includes(q) && (!f || st === f) && (!fb || buyerVal(c) === fb)
       && (!fa || areaOf(c) === fa) && (!ft || (c.tags||[]).includes(ft));
   });
+  const sort = ($('sort') && $('sort').value) || '';
+  if(sort === 'booking') items.sort((a,b)=>bookingScore(b)-bookingScore(a));
+  else if(sort === 'money') items.sort((a,b)=>moneyScore(b)-moneyScore(a));
   $('list').innerHTML = items.map(cardHTML).join('');
   $('empty').style.display = items.length ? 'none' : '';
   $('empty').textContent = curTab==='opfolg' ? 'Ingen opfølgninger er forfaldne lige nu 🎉'
@@ -598,6 +630,11 @@ function dashboardHTML(){
     scen[s].sent++; if(hasReply(c.company)||st==='Booket') scen[s].svar++; if(st==='Booket') scen[s].book++; });
   const scenRows = Object.values(scen).filter(s=>s.sent>0).sort((a,b)=>b.sent-a.sent);
 
+  // Lead scoring summary.
+  const hotLeads = cs.filter(c=>bookingScore(c)>=4).length;
+  const moneyRated = cs.filter(c=>moneyScore(c)>0);
+  const avgMoney = moneyRated.length ? (moneyRated.reduce((s,c)=>s+moneyScore(c),0)/moneyRated.length) : 0;
+
   const kpi = (num, lbl, sub, cls='') => `<div class="kpi ${cls}"><div class="num">${num}</div><div class="lbl">${lbl}</div>${sub?`<div class="ksub">${sub}</div>`:''}</div>`;
 
   const stageMax = Math.max(1, ...STATUSES.map(s=>counts[s]));
@@ -625,6 +662,8 @@ function dashboardHTML(){
       ${kpi(fmtKr(pipeline), 'Pipeline-værdi', 'åbne muligheder (late sale)', 'kpi-blue')}
       ${kpi(fmtKr(wonVal), 'Booket-værdi', 'vundet (late sale)', 'kpi-gold')}
       ${kpi(contacted+'/'+total, 'Kontaktet', `${counts['Ikke kontaktet']} mangler`)}
+      ${kpi('🔥 '+hotLeads, 'Hot leads', '≥4★ booking-sandsynlighed', 'kpi-green')}
+      ${kpi(moneyRated.length ? avgMoney.toFixed(1)+'★' : '–', 'Snit-budget', moneyRated.length ? `${moneyRated.length} vurderet af Claude` : 'tryk 💰 Vurder budget', 'kpi-gold')}
     </div>
     <div class="dashgrid">
       <div class="dashcard">
@@ -721,6 +760,8 @@ function bindGlobal(){
   $('fbuyer').addEventListener('change', render);
   $('farea').addEventListener('change', render);
   $('ftag').addEventListener('change', render);
+  $('sort').addEventListener('change', render);
+  $('btnScore').addEventListener('click', scoreContacts);
   $('btnBrief').addEventListener('click', openBriefing);
   $('btnMockups').addEventListener('click', openMockups);
   $('mockupsClose').addEventListener('click', closeMockups);
@@ -813,6 +854,7 @@ function openContactModal(company){
   $('f-temp').value = c ? (c.temp||'kold') : 'kold';
   $('f-buyer').value = c ? (c.buyer||'ukendt') : 'ukendt';
   fillPlacementSelect($('f-placement'), c ? (c.placement||'') : '');
+  $('f-money').value   = c && c.moneyScore ? String(c.moneyScore) : '';
   $('f-segment').value = c ? (c.segment||'') : '';
   $('f-tags').value    = c ? (c.tags||[]).join(', ') : '';
   $('f-person').value  = c ? (c.person||'')  : '';
@@ -828,11 +870,19 @@ async function saveContact(){
   const company = $('f-company').value.trim();
   if(!company){ $('modalErr').textContent = 'Firma er påkrævet.'; return; }
   const tags = $('f-tags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const moneyVal = $('f-money').value;
+  const prev = editingCompany ? DATA.contacts.find(x=>x.company===editingCompany) : null;
   const fields = {
     temp:$('f-temp').value, buyer:$('f-buyer').value, placement:$('f-placement').value, segment:$('f-segment').value,
     person:$('f-person').value, email:$('f-email').value.trim(), phone:$('f-phone').value,
     subject:$('f-subject').value, body:$('f-body').value, tags,
+    moneyScore: moneyVal ? Number(moneyVal) : null,
   };
+  // Only mark the reason "Manuelt sat" if the budget rating actually changed,
+  // so an existing Claude reason survives an unrelated edit.
+  if(String((prev && prev.moneyScore) || '') !== moneyVal){
+    fields.moneyReason = moneyVal ? 'Manuelt sat' : null;
+  }
   const btn = $('modalSave'); btn.disabled = true;
   try{
     const payload = editingCompany
@@ -874,6 +924,22 @@ async function classifyContacts(){
     toast(`🏷️ Færdig: ${j.counts.bureau} bureau · ${j.counts.selv} selv · ${j.counts.ukendt} ukendt. Ret frit ved at klikke på en markering.`, true);
   }catch(e){ toast('Netværksfejl.', false); }
   finally{ if($('btnClassify')){ $('btnClassify').disabled=false; $('btnClassify').textContent='🏷️ Auto-tag indkøb'; } }
+}
+
+async function scoreContacts(){
+  if(!HAS_AI){ toast('AI er slået fra — tilføj ANTHROPIC_API_KEY.', false); return; }
+  if(!confirm('Lad Claude vurdere alle kunders budget/match for outdoor (1–5 ⭐)?\n\nDet er et kvalificeret gæt ud fra virksomhedstype + jeres dialog. Du kan rette manuelt bagefter (rediger kunden).')) return;
+  const btn = $('btnScore'); if(btn){ btn.disabled=true; btn.textContent='💰 Vurderer…'; }
+  toast('💰 Claude vurderer budget for alle dine kunder…', true);
+  try{
+    const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'scoreMoney' }) });
+    if(res.status===401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ toast(j.message || 'Kunne ikke vurdere.', false); return; }
+    DATA.contacts = j.contacts; render();
+    toast(`💰 Færdig: budget vurderet for ${j.scored} kunder. Sortér på 💰 Budget for at se de bedste.`, true);
+  }catch(e){ toast('Netværksfejl.', false); }
+  finally{ if($('btnScore')){ $('btnScore').disabled=false; $('btnScore').textContent='💰 Vurder budget'; } }
 }
 
 /* ---------- daily briefing ---------- */
