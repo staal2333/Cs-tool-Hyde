@@ -86,20 +86,16 @@ function fallbackCopy(text, ok){
 function placementData(c){ return (c.placement && DATA.placements[c.placement]) || null; }
 function discountLine(c){
   const p = placementData(c);
-  if(!p || !p.price || !p.list) return null;
-  const norm = parseInt(String(p.list).replace(/\D/g,''));
-  const now  = parseInt(String(p.price).replace(/\D/g,''));
-  if(!norm || !now || norm <= now) return `Late sale-pris ${p.price} på ${c.placement}.`;
-  const pct = Math.round((1 - now/norm) * 100);
-  return `Late sale: ${p.price} mod normalt ${p.list} (~${pct}% under listepris) på ${c.placement}.`;
+  if(!p || !p.price) return null;
+  return `Hele juli til ${p.price} på ${c.placement} — prisen for kun 2 uger.`;
 }
 // Tactic per segment/type from the CRM export.
 const SEGMENT_TACTIC = {
   'Første kontakt': 'Hold første mail kort: én placering, ét tal (eksponeringer), én pris. Bed om et ja/nej, ikke et møde.',
-  'Følg op': 'Henvis til jeres sidste dialog og giv en ny grund til at handle nu (late sale-vinduet).',
+  'Følg op': 'Henvis til jeres sidste dialog og giv en ny grund til at handle nu (juli-tilbuddet: hele måneden til prisen for 2 uger).',
   'Nudge / opfølg': 'Lille, venlig nudge — tilbyd at holde pladsen et par dage, så der er en deadline.',
   'Re-aktivér': 'Bring noget nyt: ny placering, ny pris eller ny periode — ikke bare “følger lige op”.',
-  'Genåbn': 'Anerkend pausen og åbn med en konkret anledning (sommerkampagne / late sale).',
+  'Genåbn': 'Anerkend pausen og åbn med en konkret anledning (sommerkampagnen — hele juli til prisen for 2 uger).',
   'Gensend (var fraværende)': 'De var ude sidst — gensend kort og spørg om timingen passer bedre nu.',
   'Ny kontaktperson': 'Præsentér dig kort for den nye kontakt og opsummér værdien på 2 linjer.',
   'Nurtur (sagde nej)': 'De sagde nej før — pres ikke. Del værdi/cases og plant næste sæson.',
@@ -120,13 +116,13 @@ function ruleTips(c){
     tips.push('Allerede fulgt op — prøv en anden kanal (ring/LinkedIn) eller en sidste “lukker”-mail før du parkerer.');
   }
   const p = placementData(c);
-  if(p && p.period) tips.push(`Skab knaphed: perioden er ${p.period} — pladsen forsvinder efter late sale-vinduet.`);
+  if(p && p.period) tips.push(`Skab knaphed: ${p.period} kan kun sælges én gang — book hele måneden mens den er ledig.`);
   return tips.slice(0,5);
 }
 function angleFor(c){
   const p = placementData(c);
   const where = p && p.area ? `${c.placement} (${p.area})` : (c.placement || 'en stærk placering');
-  return `${c.company}: synlighed på ${where}${p && p.impr ? ` med ${p.impr} eksponeringer/uge` : ''} — i et tidsbegrænset late sale-vindue.`;
+  return `${c.company}: synlighed på ${where}${p && p.impr ? ` med ${p.impr} eksponeringer/uge` : ''} — hele juli til prisen for kun 2 uger.`;
 }
 
 /* ---------- rendering ---------- */
@@ -659,8 +655,8 @@ function dashboardHTML(){
     <div class="kpis">
       ${kpi(replyRate+'%', 'Svarprocent', `${responded} svar af ${contacted} kontaktet`, 'kpi-green')}
       ${kpi(bookRate+'%', 'Booket-rate', `${booked} booket`, 'kpi-gold')}
-      ${kpi(fmtKr(pipeline), 'Pipeline-værdi', 'åbne muligheder (late sale)', 'kpi-blue')}
-      ${kpi(fmtKr(wonVal), 'Booket-værdi', 'vundet (late sale)', 'kpi-gold')}
+      ${kpi(fmtKr(pipeline), 'Pipeline-værdi', 'åbne muligheder (juli)', 'kpi-blue')}
+      ${kpi(fmtKr(wonVal), 'Booket-værdi', 'vundet (juli)', 'kpi-gold')}
       ${kpi(contacted+'/'+total, 'Kontaktet', `${counts['Ikke kontaktet']} mangler`)}
       ${kpi('🔥 '+hotLeads, 'Hot leads', '≥4★ booking-sandsynlighed', 'kpi-green')}
       ${kpi(moneyRated.length ? avgMoney.toFixed(1)+'★' : '–', 'Snit-budget', moneyRated.length ? `${moneyRated.length} vurderet af Claude` : 'tryk 💰 Vurder budget', 'kpi-gold')}

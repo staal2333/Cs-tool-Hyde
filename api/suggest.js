@@ -14,8 +14,7 @@ function placementsOverview() {
         d.area && `område: ${d.area}`,
         d.sqm && `${d.sqm} m²`,
         d.impr && `${d.impr} eksponeringer/uge`,
-        d.price && `late sale-pris: ${d.price}`,
-        d.list && `listepris: ${d.list}`,
+        d.price && `juli-pris (hele måneden): ${d.price}`,
         d.period && `periode: ${d.period}`,
       ].filter(Boolean);
       return `- ${name} (${bits.join(', ')})`;
@@ -34,7 +33,7 @@ ${placementsOverview()}
 Sådan svarer du ALTID:
 - Skriv kort, konkret og på dansk. Ingen indledning, ingen disclaimers.
 - Tag udgangspunkt i netop denne kundes branche, segment-status og den anbefalede placering.
-- Brug "late sale"-vinklen (rabat ift. listepris) og synlighed/eksponering som løftestang, når det giver mening.
+- Brug juli-vinklen (hele måneden til prisen for kun 2 uger) og synlighed/eksponering som løftestang, når det giver mening.
 - Vær ærlig om realistiske indvendinger og hvordan de håndteres.
 - Hvis du får eksempler på Sebastians egne tidligere beskeder, så MATCH hans tone, ordvalg, længde og signatur. Han skriver varmt, direkte og uformelt.
 - Hvis du får en hidtidig dialog inkl. kundens svar, så tag højde for den og foreslå konkret, hvad Sebastian skal svare nu.
@@ -97,8 +96,7 @@ export default async function handler(req, res) {
           pl.area && `område ${pl.area}`,
           pl.sqm && `${pl.sqm} m²`,
           pl.impr && `${pl.impr} eksponeringer/uge`,
-          pl.price && `late sale ${pl.price}`,
-          pl.list && `normalt ${pl.list}`,
+          pl.price && `hele juli ${pl.price} (prisen for kun 2 uger)`,
           pl.period && pl.period,
         ]
           .filter(Boolean)

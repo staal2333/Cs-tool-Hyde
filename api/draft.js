@@ -18,7 +18,7 @@ const SCENARIOS = {
 
 // How the media-buying setup shifts WHAT we emphasise (tone stays soft/warm).
 const BUYER_ANGLE = {
-  bureau: 'Køber via MEDIEBUREAU — modtageren tænker som indkøber. Læg (blødt) vægt på det kommercielle: pris vs. normalpris, eksponeringer/rækkevidde, fleksibilitet, og at det er nemt at regne på. Spar på brand-poesien.',
+  bureau: 'Køber via MEDIEBUREAU — modtageren tænker som indkøber. Læg (blødt) vægt på det kommercielle: hele måneden til prisen for kun 2 uger, eksponeringer/rækkevidde, fleksibilitet, og at det er nemt at regne på. Spar på brand-poesien.',
   selv: 'Står SELV for medieindkøb (brand in-house) — modtageren tænker brand. Læg (blødt) vægt på synlighed, hvordan placeringen klæder netop deres brand, og sommer-eksponeringen. Tallene er stadig med, men vinklen er brand/synlighed frem for indkøbs-jargon.',
 };
 
@@ -49,7 +49,7 @@ Hej Dorthe,
 
 Lang tid siden — håber alt er godt hos jer.
 
-Grunden til jeg skriver: vi har en ledig plads på Nørrebrogade 195 i uge 26+27. Den er 180 m², 385.000+ eksponeringer om ugen, og prisen er 90.000 i stedet for 135.331.
+Grunden til jeg skriver: vi har en ledig plads på Nørrebrogade 195 hele juli. Den er 180 m², 385.000+ eksponeringer om ugen, og hele juli koster 135.331 — prisen for kun 2 uger.
 
 Jeg har vedhæftet vores sommer-oplæg med alle placeringerne i juni & juli.
 Er det noget, der kunne passe ind i jeres planer hen over sommeren?
@@ -61,7 +61,7 @@ Sebastian
 GØR:
 - Start varmt og personligt. Brug fornavn hvis du har det ("Hej Dorthe,"), ellers "Hej,". Ved genåbning: "Lang tid siden — håber alt er godt hos jer."
 - Sig grunden ligefremt: "Grunden til jeg skriver: …"
-- HVER variant SKAL selv indeholde tallene i én rolig sætning — brug denne form med de RIGTIGE tal for placeringen: "Den er [m²] m², [eksponeringer]+ eksponeringer om ugen, og prisen er [pris] i stedet for [normalpris]." Skriv tallene DIREKTE i mailen. ALDRIG procenter.
+- HVER variant SKAL selv indeholde tallene i én rolig sætning — brug denne form med de RIGTIGE tal for placeringen: "Den er [m²] m², [eksponeringer]+ eksponeringer om ugen, og hele juli koster [pris] — prisen for kun 2 uger." Skriv tallene DIREKTE i mailen. ALDRIG procenter.
 - Nævn gerne (når det passer): "Jeg har vedhæftet vores sommer-oplæg med alle placeringerne i juni & juli."
 - Slut med en BLØD, åben invitation: "Er det noget, der kunne passe ind i jeres planer hen over sommeren?" / "Sig endelig til — også hvis det først er aktuelt senere."
 - Signatur: "Bedste hilsner" og så "Sebastian".
@@ -129,8 +129,8 @@ export default async function handler(req, res) {
   if (pl && pl.sqm) {
     const price = stripKr(pl.price), list = stripKr(pl.list);
     numbersSentence = lang === 'en'
-      ? `It's ${pl.sqm} m², ${imprFmt(pl.impr)} impressions a week, and the price is ${price}${list ? ' instead of ' + list : ''}.`
-      : `Den er ${pl.sqm} m², ${imprFmt(pl.impr)} eksponeringer om ugen, og prisen er ${price}${list ? ' i stedet for ' + list : ''}.`;
+      ? `It's ${pl.sqm} m², ${imprFmt(pl.impr)} impressions a week, and the whole of July is ${price} — the price of just two weeks.`
+      : `Den er ${pl.sqm} m², ${imprFmt(pl.impr)} eksponeringer om ugen, og hele juli koster ${price} — prisen for kun 2 uger.`;
   }
 
   const [tone, logs] = await Promise.all([loadTone(), loadLogs()]);
