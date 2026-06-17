@@ -350,32 +350,49 @@ function histList(){
     .map(([company,h])=>({ company, h, c: DATA.contacts.find(x=>x.company===company) }))
     .filter(x=>x.h && x.h.events && x.h.events.length);
 }
+function personOf(company, c){
+  const h = HISTORY[company];
+  return (h && h.person) || (c && c.person) || '';
+}
+function lastReplySnippet(h){
+  const ins = (h.events||[]).filter(e=>e.dir==='in' && !e.auto);
+  const last = ins[ins.length-1];
+  return last ? (last.snippet||'') : '';
+}
 function historyTableHTML(q){
   let rows = histList();
-  if(q) rows = rows.filter(x=> (x.company+' '+((x.c&&x.c.person)||'')+' '+((x.c&&x.c.email)||'')+' '+(x.h.placements||[]).join(' ')).toLowerCase().includes(q));
-  rows.sort((a,b)=> (b.h.lastTs||0)-(a.h.lastTs||0));
+  if(q) rows = rows.filter(x=> (x.company+' '+personOf(x.company,x.c)+' '+((x.c&&x.c.email)||'')+' '+(x.h.placements||[]).join(' ')).toLowerCase().includes(q));
+  rows.forEach(x=>{
+    x.st = rec(x.company).status || 'Ikke kontaktet';
+    x.closed = x.st==='Booket' || x.st==='Nej tak';
+    x.hot = x.h.replied && !x.closed;     // replied & still open → needs you now
+  });
+  // Hot first, then newest activity.
+  rows.sort((a,b)=> (b.hot-a.hot) || (b.h.lastTs||0)-(a.h.lastTs||0));
   const totSent = rows.reduce((s,x)=>s+(x.h.sentCount||0),0);
-  const totReplied = rows.filter(x=>x.h.replied).length;
+  const hot = rows.filter(x=>x.hot).length;
   if(!rows.length) return '<div class="histempty">Ingen Gmail-historik endnu — tryk “Synk Gmail” øverst for at hente hvad hver kunde har modtaget.</div>';
-  const body = rows.map(({company,h,c})=>{
-    const st = rec(company).status || 'Ikke kontaktet';
+  const row = ({company,h,c,st,hot})=>{
+    const person = personOf(company,c);
     const last = h.events[h.events.length-1];
-    const lastTxt = last ? `${last.dir==='out'?'📤':(last.auto?'🤖':'📨')} ${esc(last.date||'')}` : '';
-    return `<tr data-company="${esc(company)}">
-      <td class="ht-co"><b>${esc(company)}</b>${c&&c.person?`<div class="ht-pers">${esc(c.person)}</div>`:''}</td>
-      <td class="ht-sent">${h.sentCount||0}</td>
+    const lastTxt = last ? `${last.dir==='out'?'📤 sendt':(last.auto?'🤖 auto':'📨 svar')} · ${esc(last.date||'')}` : '';
+    const snip = hot ? lastReplySnippet(h) : '';
+    return `<tr class="${hot?'ht-hot':''}" data-company="${esc(company)}">
+      <td class="ht-co">
+        ${person?`<div class="ht-name">${esc(person)}</div>`:'<div class="ht-name muted">— navn ukendt —</div>'}
+        <div class="ht-comp">${esc(company)}</div>
+      </td>
       <td class="ht-pl">${placementChips(h.placements)||'<span class="muted">—</span>'}</td>
-      <td class="ht-last">${lastTxt}</td>
-      <td class="ht-reply">${h.replied?'✅':'<span class="muted">—</span>'}</td>
-      <td class="ht-st"><span class="badge">${esc(st)}</span></td>
-      <td><button class="btn small act-open" title="Åbn kunden">Åbn ›</button></td>
+      <td class="ht-last">${lastTxt}<div class="ht-sent2">${h.sentCount||0} sendt${h.replied?' · svar':''}</div></td>
+      <td class="ht-st"><span class="badge ${hot?'reply':''}">${hot?'🔥 ':''}${esc(st)}</span>${snip?`<div class="ht-snip">“${esc(snip.slice(0,120))}”</div>`:''}</td>
+      <td><button class="btn small act-open" title="Åbn kunden og svar">${hot?'Svar ›':'Åbn ›'}</button></td>
     </tr>`;
-  }).join('');
+  };
   return `<div class="histwrap">
-    <div class="hist-sum">📜 ${rows.length} kunder med mailhistorik · ${totSent} mails sendt · ${totReplied} har svaret</div>
+    <div class="hist-sum">📜 ${rows.length} kunder i dialog · ${totSent} mails sendt · <b class="hist-hot">${hot} venter på dig</b></div>
     <table class="histtable">
-      <thead><tr><th>Kunde</th><th>Sendt</th><th>Placeringer tilbudt</th><th>Sidste</th><th>Svar</th><th>Status</th><th></th></tr></thead>
-      <tbody>${body}</tbody>
+      <thead><tr><th>Person / kunde</th><th>Placeringer tilbudt</th><th>Seneste</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows.map(row).join('')}</tbody>
     </table></div>`;
 }
 function bindHistRows(){
