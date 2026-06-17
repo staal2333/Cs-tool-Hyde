@@ -10,14 +10,24 @@ function placementsOverview() {
   const p = DATA.placements || {};
   return Object.entries(p)
     .map(([name, d]) => {
-      const bits = [
-        d.area && `område: ${d.area}`,
-        d.sqm && `${d.sqm} m²`,
-        d.impr && `${d.impr} eksponeringer/uge`,
-        d.price && `juli-pris (hele måneden): ${d.price}`,
-        d.period && `periode: ${d.period}`,
-      ].filter(Boolean);
-      return `- ${name} (${bits.join(', ')})`;
+      const bits = d.type === 'dooh'
+        ? [
+            'DIGITAL DOOH-skærm i øjenhøjde',
+            d.area && `område: ${d.area}`,
+            d.daily && `${d.daily} forbipasserende/døgn`,
+            d.sov && `${d.sov} share of voice pr. annoncør (maks. ${d.maxAdv || 8})`,
+            d.live && `live ${d.live}`,
+            `lanceringstilbud: 4 uger til 1 uges pris (${d.price} mod normalt ${d.list})`,
+            d.period && `periode: ${d.period}`,
+          ]
+        : [
+            d.area && `område: ${d.area}`,
+            d.sqm && `${d.sqm} m²`,
+            d.impr && `${d.impr} eksponeringer/uge`,
+            d.price && `juli-pris (hele måneden): ${d.price}`,
+            d.period && `periode: ${d.period}`,
+          ];
+      return `- ${name} (${bits.filter(Boolean).join(', ')})`;
     })
     .join('\n');
 }
@@ -92,13 +102,24 @@ export default async function handler(req, res) {
     `Segment / type: ${contact.segment || '—'}`,
     `Anbefalet placering: ${contact.placement || '—'}`,
     pl
-      ? `Placeringsdata: ${[
-          pl.area && `område ${pl.area}`,
-          pl.sqm && `${pl.sqm} m²`,
-          pl.impr && `${pl.impr} eksponeringer/uge`,
-          pl.price && `hele juli ${pl.price} (prisen for kun 2 uger)`,
-          pl.period && pl.period,
-        ]
+      ? `Placeringsdata: ${(pl.type === 'dooh'
+          ? [
+              `DIGITAL DOOH-skærm på hjørnet af Gothersgade og Grønnegade (øjenhøjde)`,
+              pl.area && `område ${pl.area}`,
+              pl.daily && `${pl.daily} forbipasserende i døgnet`,
+              pl.sov && `${pl.sov} share of voice pr. annoncør (maks. ${pl.maxAdv || 8})`,
+              pl.live && `går live ${pl.live}`,
+              `lanceringstilbud: de første 8 annoncører booker 4 uger til 1 uges pris (${pl.price} mod normalt ${pl.list})`,
+              pl.video && `AI-video af skærmen: ${pl.video}`,
+              pl.period && pl.period,
+            ]
+          : [
+              pl.area && `område ${pl.area}`,
+              pl.sqm && `${pl.sqm} m²`,
+              pl.impr && `${pl.impr} eksponeringer/uge`,
+              pl.price && `hele juli ${pl.price} (prisen for kun 2 uger)`,
+              pl.period && pl.period,
+            ])
           .filter(Boolean)
           .join(', ')}`
       : null,

@@ -125,8 +125,20 @@ export default async function handler(req, res) {
   // Build the exact "numbers" sentence from real data so the model can't dodge it.
   const stripKr = (s) => String(s || '').replace(/\s*kr\.?\s*$/i, '').trim();
   const imprFmt = (s) => String(s || '').replace('K+', '.000+').replace('K', '.000');
+  const isDooh = pl && pl.type === 'dooh';
+
+  // For digital DOOH screens the figures, the offer and the whole tone differ
+  // from facade banners — we override the banner rules with a launch-offer block.
+  let doohBrief = null;
+  if (isDooh) {
+    const vid = pl.video || '';
+    doohBrief = lang === 'en'
+      ? `\n⚠️ THIS PLACEMENT IS A DIGITAL DOOH SCREEN — NOT a facade banner. IGNORE the "whole of July … the price of just two weeks" line and the "m² / impressions a week" sentence above. Follow EXACTLY this launch-offer template and tone instead.\n\nGOLD STANDARD (DOOH) — match this feeling precisely:\n---\nHi [first name],\n\nWe've just secured a new placement on the corner of Gothersgade and Grønnegade — right in the heart of Copenhagen. It's a digital screen (DOOH) at eye level with 40,000 passers-by a day from both streets, and it goes live Monday 6 July.\n\nTo mark the launch we're offering the first 8 advertisers on the screen 4 weeks for the price of 1, at 12% share of voice.\n\nWe've made an AI-generated video showing the screen and how an ad could look — see it here: ${vid}\n\nPrices, traffic figures and other practical info are in the attached document.\n\nCould this be of interest to you in weeks 28–31?\n\nBest\nSebastian\n---\n\nDOOH RULES (these OVERRIDE the banner rules above):\n- EVERY variant MUST mention: the new digital screen on the corner of Gothersgade & Grønnegade, ~40,000 passers-by a day, live Monday 6 July, the offer "the first 8 advertisers get 4 weeks for the price of 1 at 12% share of voice", the video link (${vid}), and weeks 28–31.\n- Here you MAY point prices/traffic figures to the attached document — that is intended; do NOT invent exact kr. figures in the body.\n- Keep the soft, warm, no-pressure tone and the "Best / Sebastian" signature.`
+      : `\n⚠️ DENNE PLACERING ER EN DIGITAL DOOH-SKÆRM — IKKE et facadebanner. SE BORT FRA "hele juli koster X — prisen for kun 2 uger" og fra "m² / eksponeringer om ugen"-sætningen ovenfor. Følg i stedet PRÆCIS denne lancerings-skabelon og tone.\n\nGULDSTANDARD (DOOH) — ram præcis denne følelse:\n---\nHej [fornavn],\n\nVi har netop fået en ny placering på hjørnet af Gothersgade og Grønnegade — midt i hjertet af København. Det er en digital skærm (DOOH) i øjenhøjde med 40.000 forbipasserende i døgnet fra begge gader, og den går live mandag den 6. juli.\n\nI den anledning tilbyder vi de første 8 annoncører på skærmen at booke 4 uger til 1 uges pris, ved 12% share of voice.\n\nVi har lavet en AI-genereret video, der illustrerer skærmen og hvordan en reklame kunne se ud — se den her: ${vid}\n\nPriser, trafiktal og øvrig praktisk info finder du i det vedhæftede dokument.\n\nKunne det være interessant for jer i uge 28–31?\n\nBedste hilsner\nSebastian\n---\n\nDOOH-REGLER (overstyrer banner-reglerne ovenfor):\n- HVER variant SKAL nævne: den nye digitale skærm på hjørnet af Gothersgade og Grønnegade, ~40.000 forbipasserende i døgnet, live mandag 6. juli, tilbuddet "de første 8 annoncører booker 4 uger til 1 uges pris ved 12% share of voice", videolinket (${vid}), og perioden uge 28–31.\n- Her MÅ du gerne henvise priser/trafiktal til det vedhæftede dokument — det er meningen; opfind IKKE eksakte kr.-tal i brødteksten.\n- Behold den bløde, varme, uforpligtende tone og signaturen "Bedste hilsner / Sebastian".`;
+  }
+
   let numbersSentence = null;
-  if (pl && pl.sqm) {
+  if (pl && pl.sqm && !isDooh) {
     const price = stripKr(pl.price), list = stripKr(pl.list);
     numbersSentence = lang === 'en'
       ? `It's ${pl.sqm} m², ${imprFmt(pl.impr)} impressions a week, and the whole of July is ${price} — the price of just two weeks.`
@@ -150,6 +162,7 @@ export default async function handler(req, res) {
     pl
       ? `PLACERING: ${pl.name} (${pl.area}), periode ${pl.period}.`
       : `PLACERING: ${placName} (ingen detaljer — hold pris/tal ude).`,
+    doohBrief || '',
     numbersSentence
       ? `\nPÅKRÆVET: Hver af de 3 mails SKAL indeholde denne sætning (placér den naturligt i teksten, gerne ordret) — den ER tallene, og en henvisning til vedhæftet oplæg erstatter den ALDRIG:\n"${numbersSentence}"`
       : '',
@@ -168,15 +181,28 @@ export default async function handler(req, res) {
       messages: [{ role: 'user', content: userMsg }],
     });
     const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-    // Guarantee the figures are in every body — insert the sentence if the model dropped it.
+
+    // Guarantee the key content is in every body — insert it if the model dropped it.
+    // Banners: the m²/price sentence. DOOH: the launch-offer + video paragraph.
     const priceKey = pl && pl.price ? stripKr(pl.price) : null;
+    const vid = isDooh ? (pl.video || '') : null;
+    const doohPara = isDooh
+      ? (lang === 'en'
+          ? `The first 8 advertisers can book 4 weeks for the price of 1, at 12% share of voice. We've made an AI-generated video showing the screen — see it here: ${vid} Prices and traffic figures are in the attached document.`
+          : `De første 8 annoncører kan booke 4 uger til 1 uges pris, ved 12% share of voice. Vi har lavet en AI-genereret video, der viser skærmen — se den her: ${vid} Priser og trafiktal finder du i det vedhæftede dokument.`)
+      : null;
+    const insertAfterPlacement = (body, sentence) => {
+      const paras = body.split(/\n\s*\n/);
+      let idx = paras.findIndex((p) => (pl && pl.name && p.includes(pl.name)) || /ledig plads|available|skærm|screen|Gothersgade/i.test(p));
+      if (idx === -1) idx = 0;
+      paras.splice(idx + 1, 0, sentence);
+      return paras.join('\n\n');
+    };
     const variants = parseVariants(text).map((v) => {
-      if (numbersSentence && priceKey && !v.body.includes(priceKey)) {
-        const paras = v.body.split(/\n\s*\n/);
-        let idx = paras.findIndex((p) => (pl.name && p.includes(pl.name)) || /ledig plads|available/i.test(p));
-        if (idx === -1) idx = 0;
-        paras.splice(idx + 1, 0, numbersSentence);
-        v.body = paras.join('\n\n');
+      if (isDooh) {
+        if (vid && !v.body.includes('W0HtCeyOdDo')) v.body = insertAfterPlacement(v.body, doohPara);
+      } else if (numbersSentence && priceKey && !v.body.includes(priceKey)) {
+        v.body = insertAfterPlacement(v.body, numbersSentence);
       }
       return v;
     });

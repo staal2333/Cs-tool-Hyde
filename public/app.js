@@ -87,6 +87,7 @@ function placementData(c){ return (c.placement && DATA.placements[c.placement]) 
 function discountLine(c){
   const p = placementData(c);
   if(!p || !p.price) return null;
+  if(p.type === 'dooh') return `${c.placement}: 4 uger til 1 uges pris (${p.price} mod normalt ${p.list||''}) — de første 8 annoncører, 12% share of voice, ${p.period||''}.`;
   return `Hele juli til ${p.price} på ${c.placement} — prisen for kun 2 uger.`;
 }
 // Tactic per segment/type from the CRM export.
@@ -116,12 +117,14 @@ function ruleTips(c){
     tips.push('Allerede fulgt op — prøv en anden kanal (ring/LinkedIn) eller en sidste “lukker”-mail før du parkerer.');
   }
   const p = placementData(c);
-  if(p && p.period) tips.push(`Skab knaphed: ${p.period} kan kun sælges én gang — book hele måneden mens den er ledig.`);
+  if(p && p.type === 'dooh') tips.push(`Skab knaphed: kun de første 8 annoncører får lanceringstilbuddet (4 uger til 1 uges pris) — og skærmen går live ${p.live||'snart'}.`);
+  else if(p && p.period) tips.push(`Skab knaphed: ${p.period} kan kun sælges én gang — book hele måneden mens den er ledig.`);
   return tips.slice(0,5);
 }
 function angleFor(c){
   const p = placementData(c);
   const where = p && p.area ? `${c.placement} (${p.area})` : (c.placement || 'en stærk placering');
+  if(p && p.type === 'dooh') return `${c.company}: digital skærm på ${where} med ${p.daily||''} forbipasserende i døgnet — lanceringstilbud: 4 uger til 1 uges pris (kun de første 8 annoncører).`;
   return `${c.company}: synlighed på ${where}${p && p.impr ? ` med ${p.impr} eksponeringer/uge` : ''} — hele juli til prisen for kun 2 uger.`;
 }
 
@@ -681,7 +684,9 @@ function mapPopupHTML(name){
   const p = DATA.placements[name];
   const n = DATA.contacts.filter(c=>c.placement===name).length;
   const img = hasMockup(name) ? `<img class="mappop-img" src="${mockUrl(name)}" alt="">` : '';
-  const bits = [p.sqm && p.sqm+' m²', p.impr && p.impr+' eksp./uge', p.price && p.price].filter(Boolean).join(' · ');
+  const bits = p.type === 'dooh'
+    ? ['📺 Digital DOOH', p.daily && p.daily+'/døgn', p.sov && p.sov+' SOV', p.price && '4 uger '+p.price].filter(Boolean).join(' · ')
+    : [p.sqm && p.sqm+' m²', p.impr && p.impr+' eksp./uge', p.price && p.price].filter(Boolean).join(' · ');
   return `<div class="mappop">${img}<b>${esc(name)}</b>`+
     `<div class="mappop-area">${esc(p.area||'')}</div>`+
     (bits?`<div class="mappop-row">${esc(bits)}</div>`:'')+
