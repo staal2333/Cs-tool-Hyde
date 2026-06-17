@@ -10,6 +10,7 @@ let DATA = { contacts: [], placements: {}, followupDaysDefault: 5 };
 let STATE = {};            // { company: {status, date, note} }
 let LOGS = {};             // { company: [{who, text, ts}] }
 let THREADS = {};          // { company: {subject, from, date, snippet, auto} }
+let HISTORY = {};          // { company: {events:[{dir,date,ts,subject,snippet,placements,auto}], placements:[], sentCount, replied, lastReplyTs, lastTs} }
 let GMAIL = { configured:false, connected:false, lastSync:null };
 let PLACEMENT_IMAGES = new Set();   // placement names that have a mockup
 let MOCK_BUST = 0;                  // bumped after upload/delete to bust <img> cache
@@ -308,14 +309,89 @@ function winboxHTML(c){
     </div>
   </div>`;
 }
-function threadHTML(company){
-  const t = THREADS[company];
-  if(!t) return '';
-  const when = t.date ? new Date(t.date).toLocaleDateString('da-DK') : '';
-  if(t.auto){
-    return `<div class="thread auto">🤖 Auto-svar (${esc(when)}): <span class="thsnip">${esc(t.snippet||'')}</span></div>`;
-  }
-  return `<div class="thread real">📨 Svar fra kunden (${esc(when)}): <span class="thsnip">${esc(t.snippet||'')}</span></div>`;
+function placementChips(list){
+  if(!list || !list.length) return '';
+  return `<span class="plchips">${list.map(p=>`<span class="plchip">📍 ${esc(p)}</span>`).join('')}</span>`;
+}
+// Per-contact, Gmail-aligned timeline: every mail (out/in), date, subject + which placement was offered.
+function historyHTML(company){
+  const h = HISTORY[company];
+  if(!h || !h.events || !h.events.length) return '';
+  const offered = h.placements && h.placements.length
+    ? `<div class="hist-offered">Tilbudt: ${placementChips(h.placements)}</div>` : '';
+  const evs = h.events.slice(-8); // newest 8, oldest first within that window
+  const hidden = h.events.length - evs.length;
+  const rows = evs.slice().reverse().map(e=>{
+    const icon = e.dir==='out' ? '📤' : (e.auto ? '🤖' : '📨');
+    const who = e.dir==='out' ? 'Sendt' : (e.auto ? 'Auto-svar' : 'Svar');
+    const pl = e.dir==='out' ? placementChips(e.placements) : '';
+    return `<div class="hist-row ${e.dir}${e.auto?' auto':''}">
+      <span class="hist-ic">${icon}</span>
+      <span class="hist-meta"><b>${who}</b> · ${esc(e.date||'')}</span>
+      <span class="hist-subj">${esc(e.subject||'')}</span>
+      ${pl}
+      <span class="hist-snip">${esc((e.snippet||'').slice(0,140))}</span>
+    </div>`;
+  }).join('');
+  const more = hidden>0 ? `<div class="hist-more">+${hidden} ældre mails i tråden</div>` : '';
+  return `<div class="histbox">
+    <div class="hist-title">📜 Gmail-historik (${h.sentCount||0} sendt${h.replied?' · svar modtaget':''})</div>
+    ${offered}
+    <div class="hist-rows">${rows}</div>
+    ${more}
+  </div>`;
+}
+// Kept for any legacy callers; the card now uses historyHTML.
+function threadHTML(company){ return historyHTML(company); }
+
+/* ---------- Historik tab: per-contact overview of sends + placements ---------- */
+function histList(){
+  return Object.entries(HISTORY)
+    .map(([company,h])=>({ company, h, c: DATA.contacts.find(x=>x.company===company) }))
+    .filter(x=>x.h && x.h.events && x.h.events.length);
+}
+function historyTableHTML(q){
+  let rows = histList();
+  if(q) rows = rows.filter(x=> (x.company+' '+((x.c&&x.c.person)||'')+' '+((x.c&&x.c.email)||'')+' '+(x.h.placements||[]).join(' ')).toLowerCase().includes(q));
+  rows.sort((a,b)=> (b.h.lastTs||0)-(a.h.lastTs||0));
+  const totSent = rows.reduce((s,x)=>s+(x.h.sentCount||0),0);
+  const totReplied = rows.filter(x=>x.h.replied).length;
+  if(!rows.length) return '<div class="histempty">Ingen Gmail-historik endnu — tryk “Synk Gmail” øverst for at hente hvad hver kunde har modtaget.</div>';
+  const body = rows.map(({company,h,c})=>{
+    const st = rec(company).status || 'Ikke kontaktet';
+    const last = h.events[h.events.length-1];
+    const lastTxt = last ? `${last.dir==='out'?'📤':(last.auto?'🤖':'📨')} ${esc(last.date||'')}` : '';
+    return `<tr data-company="${esc(company)}">
+      <td class="ht-co"><b>${esc(company)}</b>${c&&c.person?`<div class="ht-pers">${esc(c.person)}</div>`:''}</td>
+      <td class="ht-sent">${h.sentCount||0}</td>
+      <td class="ht-pl">${placementChips(h.placements)||'<span class="muted">—</span>'}</td>
+      <td class="ht-last">${lastTxt}</td>
+      <td class="ht-reply">${h.replied?'✅':'<span class="muted">—</span>'}</td>
+      <td class="ht-st"><span class="badge">${esc(st)}</span></td>
+      <td><button class="btn small act-open" title="Åbn kunden">Åbn ›</button></td>
+    </tr>`;
+  }).join('');
+  return `<div class="histwrap">
+    <div class="hist-sum">📜 ${rows.length} kunder med mailhistorik · ${totSent} mails sendt · ${totReplied} har svaret</div>
+    <table class="histtable">
+      <thead><tr><th>Kunde</th><th>Sendt</th><th>Placeringer tilbudt</th><th>Sidste</th><th>Svar</th><th>Status</th><th></th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>`;
+}
+function bindHistRows(){
+  document.querySelectorAll('.histtable tr[data-company]').forEach(tr=>{
+    const company = tr.dataset.company;
+    const open = tr.querySelector('.act-open');
+    if(open) open.addEventListener('click', ()=>openContact(company));
+  });
+}
+function openContact(company){
+  const c = DATA.contacts.find(x=>x.company===company); if(!c) return;
+  curTab = c.temp==='varm' ? 'varm' : 'kold';
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x.dataset.tab===curTab));
+  $('q').value = company;
+  render();
+  setTimeout(()=>{ const card=[...document.querySelectorAll('.card')].find(x=>x.dataset.company===company); if(card) card.scrollIntoView({behavior:'smooth',block:'center'}); }, 60);
 }
 function contactMetaHTML(c){
   const bits = [c.person && esc(c.person), c.email && esc(c.email), c.phone && esc(c.phone)].filter(Boolean);
@@ -405,6 +481,14 @@ function render(){
     $('list').innerHTML = dashboardHTML();
     $('empty').style.display = 'none';
     renderCounts();
+    return;
+  }
+  if(curTab === 'hist'){
+    $('list').innerHTML = historyTableHTML($('q').value.toLowerCase());
+    $('empty').style.display = 'none';
+    renderCounts();
+    bindHistRows();
+    renderBar();
     return;
   }
   populateFilters();
@@ -571,6 +655,7 @@ function renderCounts(){
   $('c-varm').textContent   = '('+DATA.contacts.filter(c=>c.temp==='varm').length+')';
   $('c-opfolg').textContent = '('+DATA.contacts.filter(isDue).length+')';
   $('c-svar').textContent   = '('+DATA.contacts.filter(c=>hasReply(c.company)).length+')';
+  if($('c-hist')) $('c-hist').textContent = '('+Object.values(HISTORY).filter(h=>h&&h.events&&h.events.length).length+')';
 }
 function renderBar(){
   renderCounts();
@@ -1045,6 +1130,7 @@ async function loadData(){
   STATE = d.state || {};
   LOGS = d.logs || {};
   THREADS = d.threads || {};
+  HISTORY = d.history || {};
   GMAIL = d.gmail || { configured:false, connected:false, lastSync:null };
   PLACEMENT_IMAGES = new Set(d.placementImages || []);
   HAS_AI = !!d.hasAI;
