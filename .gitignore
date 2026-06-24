@@ -6,3 +6,7 @@ node_modules/
 .DS_Store
 
 .vercel
+
+# Local-only design preview (contains real customer data — never commit)
+_local_data.json
+_local_preview.mjs
