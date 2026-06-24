@@ -79,6 +79,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--ink);margin:0;-web
 #q:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(59,116,255,.14)}
 .controls select{padding:10px 12px;border:1px solid var(--line);border-radius:11px;font-size:13.5px;font-family:inherit;background:var(--card);box-shadow:var(--shadow-sm);cursor:pointer;color:var(--ink)}
 .controls select:focus{outline:none;border-color:var(--accent)}
+.ctrl-toggle{display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid var(--line);border-radius:11px;background:var(--card);box-shadow:var(--shadow-sm);font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
+.ctrl-toggle input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+.ctrl-toggle:has(input:checked){color:var(--brand);border-color:#cdd8ec}
 
 /* ---------- cards ---------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:17px 19px;margin:13px 0;box-shadow:var(--shadow-sm);transition:box-shadow .18s,transform .18s,border-color .18s;position:relative;overflow:hidden}

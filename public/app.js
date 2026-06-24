@@ -629,9 +629,13 @@ function render(){
   const fb = ($('fbuyer') && $('fbuyer').value) || '';
   const fa = ($('farea') && $('farea').value) || '';
   const ft = ($('ftag') && $('ftag').value) || '';
+  const hideRecent = (curTab==='kold'||curTab==='varm') && $('hideSent') && $('hideSent').checked;
   let items = contactsForTab().filter(c=>{
     const hay = (c.company+' '+(c.subject||'')+' '+(c.segment||'')+' '+(c.person||'')+' '+(c.email||'')+' '+areaOf(c)+' '+(c.tags||[]).join(' ')).toLowerCase();
     const st = rec(c.company).status || 'Ikke kontaktet';
+    // Hide contacts you've just sent to / followed up (still in the cadence window),
+    // so you don't keep seeing the same ones — they return when due for follow-up.
+    if(hideRecent && fuWaiting(c)) return false;
     return hay.includes(q) && (!f || st === f) && (!fb || buyerVal(c) === fb)
       && (!fa || areaOf(c) === fa) && (!ft || (c.tags||[]).includes(ft));
   });
@@ -987,6 +991,13 @@ function bindGlobal(){
   $('farea').addEventListener('change', render);
   $('ftag').addEventListener('change', render);
   $('sort').addEventListener('change', render);
+  if($('hideSent')){
+    try{ if(localStorage.getItem('hideSent')==='0') $('hideSent').checked = false; }catch(e){}
+    $('hideSent').addEventListener('change', e=>{
+      try{ localStorage.setItem('hideSent', e.target.checked ? '1' : '0'); }catch(_){}
+      render();
+    });
+  }
   $('btnScore').addEventListener('click', scoreContacts);
   $('btnEnrich').addEventListener('click', enrichContacts);
   $('btnBrief').addEventListener('click', openBriefing);
