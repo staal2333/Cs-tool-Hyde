@@ -575,6 +575,7 @@ function cardHTML(c){
       ${gmailBtn}
       <select class="st">${opts}</select>
       ${(isFu||curTab==='svar') ? '' : '<input class="note" placeholder="Note…" value="'+esc(r.note||'')+'">'}
+      ${hasReply(c.company) ? '<button class="btn small act-reply" title="Generér et svar der besvarer kundens mail">✉️ Besvar mail</button>' : ''}
       <button class="btn small act-draft-toggle">✍️ Skriv mail</button>
       <button class="btn small act-win">🎯 ${openPanel?'Skjul hjælp':'Vind kunden'}</button>
       <span class="when">${r.date ? '· '+r.date : ''}</span>
@@ -716,6 +717,15 @@ function bindCards(){
     });
     const dgen = el('.act-draft-gen', card);
     if(dgen) dgen.addEventListener('click', ()=>generateDrafts(card.dataset.company, card));
+
+    const replyb = el('.act-reply', card);
+    if(replyb) replyb.addEventListener('click', ()=>{
+      const w = el('.draftwrap', card);
+      w.style.display = '';                       // open the mail panel
+      const dt = el('.act-draft-toggle', card); if(dt) dt.textContent = '✍️ Skjul mail';
+      const sc = el('.d-scenario', card); if(sc) sc.value = 'reply';   // force "reply" scenario
+      generateDrafts(company, card);              // and answer the customer's mail right away
+    });
 
     const saveLog = (who) => {
       const ta = el('.loginput', card);

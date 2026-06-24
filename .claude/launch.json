@@ -6,6 +6,12 @@
       "runtimeExecutable": "vercel",
       "runtimeArgs": ["dev", "--listen", "3000"],
       "port": 3000
+    },
+    {
+      "name": "hyde-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["_local_preview.mjs", "5051"],
+      "port": 5051
     }
   ]
 }

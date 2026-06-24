@@ -118,6 +118,7 @@ export default async function handler(req, res) {
   if (!contact) return res.status(404).json({ error: 'unknown_company' });
 
   const scenarioKey = SCENARIOS[body.scenario] ? body.scenario : 'open';
+  const isReply = scenarioKey === 'reply';
   const lang = body.lang === 'en' ? 'en' : 'da';
   const placName = body.placement || contact.placement;
   const pl = placementBlock(placName);
@@ -129,8 +130,9 @@ export default async function handler(req, res) {
 
   // For digital DOOH screens the figures, the offer and the whole tone differ
   // from facade banners — we override the banner rules with a launch-offer block.
+  // (Skipped when replying: a reply must answer the mail, not pitch the screen.)
   let doohBrief = null;
-  if (isDooh) {
+  if (isDooh && !isReply) {
     const vid = pl.video || '';
     doohBrief = lang === 'en'
       ? `\n⚠️ THIS PLACEMENT IS A DIGITAL DOOH SCREEN — NOT a facade banner. IGNORE the "whole of July … the price of just two weeks" line and the "m² / impressions a week" sentence above. Follow EXACTLY this launch-offer template and tone instead.\n\nGOLD STANDARD (DOOH) — match this feeling precisely:\n---\nHi [first name],\n\nWe've just secured a new placement on the corner of Gothersgade and Grønnegade — right in the heart of Copenhagen. It's a digital screen (DOOH) at eye level with 40,000 passers-by a day from both streets, and it goes live Monday 6 July.\n\nTo mark the launch we're offering the first 8 advertisers on the screen 4 weeks for the price of 1, at 12% share of voice.\n\nWe've made an AI-generated video showing the screen and how an ad could look — see it here: ${vid}\n\nPrices, traffic figures and other practical info are in the attached document.\n\nCould this be of interest to you in weeks 28–31?\n\nBest\nSebastian\n---\n\nDOOH RULES (these OVERRIDE the banner rules above):\n- EVERY variant MUST mention: the new digital screen on the corner of Gothersgade & Grønnegade, ~40,000 passers-by a day, live Monday 6 July, the offer "the first 8 advertisers get 4 weeks for the price of 1 at 12% share of voice", the video link (${vid}), and weeks 28–31.\n- Here you MAY point prices/traffic figures to the attached document — that is intended; do NOT invent exact kr. figures in the body.\n- Keep the soft, warm, no-pressure tone and the "Best / Sebastian" signature.`
@@ -138,7 +140,7 @@ export default async function handler(req, res) {
   }
 
   let numbersSentence = null;
-  if (pl && pl.sqm && !isDooh) {
+  if (pl && pl.sqm && !isDooh && !isReply) {
     const price = stripKr(pl.price), list = stripKr(pl.list);
     numbersSentence = lang === 'en'
       ? `It's ${pl.sqm} m², ${imprFmt(pl.impr)} impressions a week, and the whole of July is ${price} — the price of just two weeks.`
@@ -147,9 +149,24 @@ export default async function handler(req, res) {
 
   const [tone, logs] = await Promise.all([loadTone(), loadLogs()]);
   const toneExamples = tone.slice(-6).map((e, i) => `${i + 1}. ${e.text}`).join('\n\n');
-  const dialogue = (logs[contact.company] || [])
+  const entries = logs[contact.company] || [];
+  const dialogue = entries
     .map((e) => `${e.who === 'kunde' ? 'Kunde' : 'Sebastian'}: ${e.text}`)
     .join('\n');
+  const lastKunde = [...entries].reverse().find((e) => e.who === 'kunde');
+
+  // When replying, override the outreach template entirely: answer the mail.
+  let replyBrief = null;
+  if (isReply) {
+    const placeInfo = pl
+      ? (isDooh
+          ? `${pl.name}: digital DOOH-skærm, ~${pl.daily} forbipasserende/døgn, lanceringstilbud 4 uger til 1 uges pris (${pl.price}), ${pl.period}.`
+          : `${pl.name} (${pl.area}): ${pl.sqm} m², ${imprFmt(pl.impr)} eksponeringer/uge, hele juli ${stripKr(pl.price)} kr. (prisen for 2 uger).`)
+      : '';
+    replyBrief = lang === 'en'
+      ? `\n⚠️ THIS IS A REPLY TO THE CUSTOMER'S EMAIL — NOT a new sales mail. IGNORE the outreach gold standard ("we have a placement available…") and the required numbers sentence.\n\nWrite a reply that:\n- Reads the customer's latest message carefully and ANSWERS exactly what they wrote/asked — point by point.\n- Is warm, helpful and human, in Sebastian's tone. No pressure, no boilerplate.\n- Only brings up price / placement / figures IF the customer asked or it's the natural answer. Facts you may use if relevant: ${placeInfo || '(none)'}\n- If you don't know something the customer asks, say you'll check and come back — never invent details.\n- Suggests a soft next step when it fits (a short call, sending the deck, holding a spot).\n- Ends with "Best / Sebastian".\n\nTHE CUSTOMER'S LATEST MESSAGE (answer THIS precisely):\n"""${(lastKunde && lastKunde.text) || (dialogue || '(no message text found — base it on the dialogue)')}"""`
+      : `\n⚠️ DETTE ER ET SVAR PÅ KUNDENS MAIL — ikke en ny salgsmail. SE BORT FRA outreach-guldstandarden ("vi har en ledig plads…") og fra kravet om tal-sætningen.\n\nSkriv et svar der:\n- Læser kundens seneste besked grundigt og BESVARER præcis det, de skriver/spørger om — punkt for punkt.\n- Er varmt, hjælpsomt og menneskeligt, i Sebastians tone. Ingen pres, ingen skabelon-floskler.\n- Kun nævner pris / placering / tal HVIS kunden spørger til det, eller det er det naturlige svar. Fakta du må bruge hvis relevant: ${placeInfo || '(ingen)'}\n- Hvis kunden spørger om noget du ikke ved, så skriv at du lige tjekker og vender tilbage — opfind ALDRIG detaljer.\n- Foreslår blødt næste skridt når det passer (en kort snak, sende oplæg, holde en plads).\n- Slutter med "Bedste hilsner / Sebastian".\n\nKUNDENS SENESTE BESKED (besvar PRÆCIS denne):\n"""${(lastKunde && lastKunde.text) || (dialogue || '(ingen beskedtekst fundet — tag afsæt i dialogen)')}"""`;
+  }
 
   const userMsg = [
     `Kunde: ${contact.company}${contact.person ? ' (kontakt: ' + contact.person + ')' : ''}`,
@@ -157,12 +174,12 @@ export default async function handler(req, res) {
     `Sprog: ${lang === 'en' ? 'ENGELSK' : 'DANSK'}`,
     '',
     `SCENARIE: ${SCENARIOS[scenarioKey]}`,
-    BUYER_ANGLE[contact.buyer] ? `\nVINKEL (medieindkøb): ${BUYER_ANGLE[contact.buyer]}` : '',
+    BUYER_ANGLE[contact.buyer] && !isReply ? `\nVINKEL (medieindkøb): ${BUYER_ANGLE[contact.buyer]}` : '',
     '',
-    pl
+    replyBrief || (pl
       ? `PLACERING: ${pl.name} (${pl.area}), periode ${pl.period}.`
-      : `PLACERING: ${placName} (ingen detaljer — hold pris/tal ude).`,
-    doohBrief || '',
+      : `PLACERING: ${placName} (ingen detaljer — hold pris/tal ude).`),
+    isReply ? '' : (doohBrief || ''),
     numbersSentence
       ? `\nPÅKRÆVET: Hver af de 3 mails SKAL indeholde denne sætning (placér den naturligt i teksten, gerne ordret) — den ER tallene, og en henvisning til vedhæftet oplæg erstatter den ALDRIG:\n"${numbersSentence}"`
       : '',
@@ -171,7 +188,9 @@ export default async function handler(req, res) {
       : '',
     toneExamples ? `\nSEBASTIANS EGNE BESKEDER (match denne tone):\n${toneExamples}` : '',
     '',
-    'VIGTIGT: De 3 varianter skal være tydeligt FORSKELLIGE — forskellig åbning, forskellig længde og forskellig vinkel (ikke tre omskrivninger af samme sætning). Hvis der er en dialog, så lad mindst én variant tage afsæt i noget konkret derfra. Undgå generiske floskler.',
+    isReply
+      ? 'VIGTIGT: Alle 3 varianter SKAL besvare kundens seneste besked konkret — men variér dem: én kort og imødekommende, én lidt mere uddybende, én der tydeligt foreslår næste skridt. Aldrig tre omskrivninger af samme sætning, ingen generiske floskler.'
+      : 'VIGTIGT: De 3 varianter skal være tydeligt FORSKELLIGE — forskellig åbning, forskellig længde og forskellig vinkel (ikke tre omskrivninger af samme sætning). Hvis der er en dialog, så lad mindst én variant tage afsæt i noget konkret derfra. Undgå generiske floskler.',
     '',
     'Lav de 3 varianter nu.',
   ].filter(Boolean).join('\n');
@@ -204,6 +223,7 @@ export default async function handler(req, res) {
       return paras.join('\n\n');
     };
     const variants = parseVariants(text).map((v) => {
+      if (isReply) return v; // a reply answers the mail — never force the sales sentence
       if (isDooh) {
         if (vid && !v.body.includes('W0HtCeyOdDo')) v.body = insertAfterPlacement(v.body, doohPara);
       } else if (numbersSentence && priceKey && !v.body.includes(priceKey)) {
