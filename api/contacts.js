@@ -137,11 +137,18 @@ function enrichLine(c, idx, logs) {
 const val = (s) => { const t = (s || '').trim(); return !t || t === '-' ? '' : t.slice(0, 120); };
 
 async function enrichAll() {
-  const [contacts, logs] = await Promise.all([effectiveContacts(), loadLogs()]);
+  const [all, logs] = await Promise.all([effectiveContacts(), loadLogs()]);
   const client = new Anthropic();
-  const model = process.env.CLASSIFY_MODEL || 'claude-opus-4-8';
+  // Haiku: fact extraction is simple and Opus has a tight 4k-output/min org cap.
+  const model = process.env.ENRICH_MODEL || 'claude-haiku-4-5';
 
-  const CHUNK = 22;
+  // Only enrich contacts we're actually in dialogue with — that's where the
+  // signatures/facts live; enriching 342 cold names would blow the rate limit
+  // for little value.
+  const contacts = all.filter((c) => (logs[c.company] || []).some((e) => e.who === 'kunde'));
+  if (!contacts.length) return { contacts: 0, person: 0, title: 0, phone: 0, email: 0, scanned: 0 };
+
+  const CHUNK = 25;
   const chunks = [];
   for (let i = 0; i < contacts.length; i += CHUNK) chunks.push(contacts.slice(i, i + CHUNK));
 
@@ -149,7 +156,7 @@ async function enrichAll() {
     const lines = chunk.map((c, j) => enrichLine(c, j, logs)).join('\n');
     const msg = await client.messages.create({
       model,
-      max_tokens: 4000,
+      max_tokens: 1800,
       system: [{ type: 'text', text: ENRICH_SYSTEM, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: lines }],
     });
@@ -178,7 +185,7 @@ async function enrichAll() {
   }));
 
   const map = Object.assign({}, ...partials);
-  const counts = { contacts: Object.keys(map).length, person: 0, title: 0, phone: 0, email: 0 };
+  const counts = { contacts: Object.keys(map).length, scanned: contacts.length, person: 0, title: 0, phone: 0, email: 0 };
   for (const p of Object.values(map)) {
     if (p.person) counts.person++;
     if (p.title) counts.title++;
