@@ -53,6 +53,20 @@ function isDue(c){
   const r = rec(c.company);
   return (r.status === 'Sendt' || r.status === 'Opfølgning sendt') && daysSince(r.date) >= followupDays();
 }
+// How many mails we've sent this contact so far (from the Gmail history).
+function sentCountOf(company){ const h = HISTORY[company]; return (h && h.sentCount) || 0; }
+// The status a contact should land on right after you send them a mail.
+// A 2nd+ mail (or sending from the follow-up tab) is a follow-up; the first is "Sendt".
+function statusAfterSend(company, isFu){
+  if(isFu) return 'Opfølgning sendt';
+  const cur = rec(company).status || 'Ikke kontaktet';
+  const alreadyContacted = cur !== 'Ikke kontaktet' || sentCountOf(company) >= 1;
+  return alreadyContacted ? 'Opfølgning sendt' : 'Sendt';
+}
+// Persist a send: advance status + stamp today's date so the pipeline reflects it now.
+function registerSend(company, isFu){
+  return setRec(company, { status: statusAfterSend(company, isFu), date: today() }).then(render);
+}
 // Follow-up radar: days since the last mail + an urgency tier.
 function fuTier(days){
   const t = followupDays();
@@ -240,16 +254,16 @@ function bindVariants(company, card){
   card.querySelectorAll('.variant').forEach(v=>{
     const subj = el('.v-subj', v).textContent;
     const bodyt = el('.v-body', v).textContent;
-    const markSent = ()=>{ const r=rec(company); if(!r.status||r.status==='Ikke kontaktet') setRec(company,{status:'Sendt',date:today()}).then(render); };
+    const markSent = ()=> registerSend(company, false);
     el('.act-vcopysub', v).addEventListener('click', e=>copyText(subj, e.target));
     el('.act-vcopy', v).addEventListener('click', e=>{ copyText(bodyt, e.target); markSent(); });
     const vsend = el('.act-vsend', v);
     if(vsend) vsend.addEventListener('click', e=>{
-      const threadId = hasReply(company) ? (THREADS[company] && THREADS[company].threadId) : null;
+      const threadId = (THREADS[company] && THREADS[company].threadId) || (HISTORY[company] && HISTORY[company].threadId) || null;
       const plac = (el('.d-placement', card) || {}).value || c.placement;
       const attachPlacement = hasMockup(plac) ? plac : null;
       const scenario = (el('.d-scenario', card) || {}).value || defaultScenario(c);
-      sendMail(company, { to:contactEmail(c), subject:subj, body:bodyt, status:'Sendt', threadId, attachPlacement, scenario }, e.target);
+      sendMail(company, { to:contactEmail(c), subject:subj, body:bodyt, status:statusAfterSend(company,false), threadId, attachPlacement, scenario }, e.target);
     });
     el('.act-vgmail', v).addEventListener('click', ()=>{ window.open(gmailComposeUrlRaw(contactEmail(c), subj, bodyt), '_blank'); markSent(); });
     el('.act-vsave', v).addEventListener('click', async (e)=>{
@@ -546,16 +560,14 @@ function bindCards(){
     if(copysub) copysub.addEventListener('click', e=>copyText(el('.subj',card).textContent, e.target));
     const copy = el('.act-copy', card);
     if(copy) copy.addEventListener('click', e=>{
-      const isFu = e.target.dataset.fu === '1';
       copyText(el('.body',card).textContent, e.target);
-      if(isFu){ setRec(company,{status:'Opfølgning sendt', date:today()}).then(render); }
-      else { const r = rec(company); if(!r.status || r.status==='Ikke kontaktet') setRec(company,{status:'Sendt', date:today()}).then(render); }
+      registerSend(company, e.target.dataset.fu === '1');
     });
     const gmail = el('.act-gmail', card);
     if(gmail) gmail.addEventListener('click', ()=>{
       const c = DATA.contacts.find(x=>x.company===company);
       window.open(gmailComposeUrl(c), '_blank');
-      const r = rec(company); if(!r.status || r.status==='Ikke kontaktet') setRec(company,{status:'Sendt', date:today()}).then(render);
+      registerSend(company, curTab === 'opfolg');
     });
     const sendb = el('.act-send', card);
     if(sendb) sendb.addEventListener('click', e=>{
@@ -563,8 +575,8 @@ function bindCards(){
       const isFu = curTab === 'opfolg';
       const subject = isFu ? c.fuSubject : c.subject;
       const body = isFu ? c.fuBody : c.body;
-      const status = isFu ? 'Opfølgning sendt' : 'Sendt';
-      const threadId = hasReply(company) ? (THREADS[company] && THREADS[company].threadId) : null;
+      const status = statusAfterSend(company, isFu);
+      const threadId = (THREADS[company] && THREADS[company].threadId) || (HISTORY[company] && HISTORY[company].threadId) || null;
       const chk = el('.act-attach', card);
       const attachPlacement = (chk && chk.checked && hasMockup(c.placement)) ? c.placement : null;
       sendMail(company, { to:contactEmail(c), subject, body, status, threadId, attachPlacement, scenario: defaultScenario(c) }, e.target);

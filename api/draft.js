@@ -166,8 +166,12 @@ export default async function handler(req, res) {
     numbersSentence
       ? `\nPÅKRÆVET: Hver af de 3 mails SKAL indeholde denne sætning (placér den naturligt i teksten, gerne ordret) — den ER tallene, og en henvisning til vedhæftet oplæg erstatter den ALDRIG:\n"${numbersSentence}"`
       : '',
-    dialogue && scenarioKey === 'reply' ? `\nHIDTIDIG DIALOG (svar konkret på kundens seneste):\n${dialogue}` : '',
+    dialogue
+      ? `\nHIDTIDIG DIALOG MED KUNDEN (brug den AKTIVT — referér konkret til hvad der er sagt, så mailen bliver personlig og dynamisk frem for skabelon-agtig${scenarioKey === 'reply' ? '; svar direkte og specifikt på kundens seneste besked' : ''}):\n${dialogue}`
+      : '',
     toneExamples ? `\nSEBASTIANS EGNE BESKEDER (match denne tone):\n${toneExamples}` : '',
+    '',
+    'VIGTIGT: De 3 varianter skal være tydeligt FORSKELLIGE — forskellig åbning, forskellig længde og forskellig vinkel (ikke tre omskrivninger af samme sætning). Hvis der er en dialog, så lad mindst én variant tage afsæt i noget konkret derfra. Undgå generiske floskler.',
     '',
     'Lav de 3 varianter nu.',
   ].filter(Boolean).join('\n');
@@ -177,6 +181,7 @@ export default async function handler(req, res) {
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 2600,
+      temperature: 0.9, // more varied, less templated phrasing across the 3 drafts
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMsg }],
     });
