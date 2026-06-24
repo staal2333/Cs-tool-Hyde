@@ -52,12 +52,12 @@ function followupDays(){ return parseInt($('thr').value) || DATA.followupDaysDef
 function isDue(c){
   const st = rec(c.company).status || 'Ikke kontaktet';
   if(st !== 'Sendt' && st !== 'Opfølgning sendt') return false; // excludes replies, Booket, Nej tak
-  return daysSinceTouch(c) >= followupDays();
+  return daysSinceTouch(c) >= fuCadence(c);
 }
 // Sent but not yet due — queued for an upcoming follow-up.
 function fuWaiting(c){
   const st = rec(c.company).status || '';
-  return (st === 'Sendt' || st === 'Opfølgning sendt') && daysSinceTouch(c) < followupDays();
+  return (st === 'Sendt' || st === 'Opfølgning sendt') && daysSinceTouch(c) < fuCadence(c);
 }
 // How many mails we've sent this contact so far (from the Gmail history).
 function sentCountOf(company){ const h = HISTORY[company]; return (h && h.sentCount) || 0; }
@@ -81,9 +81,13 @@ function lastTouchTs(c){
   return d ? d.getTime() : 0;
 }
 function daysSinceTouch(c){ const ts = lastTouchTs(c); return ts ? Math.floor((Date.now()-ts)/86400000) : 0; }
-// Follow-up stage drives both grouping and the recommended mail scenario.
+// Follow-up stage drives grouping, the recommended scenario AND the cadence.
 function fuStage(c){ const n = touchCount(c); return n>=3 ? 'last' : (n===2 ? 'second' : 'first'); }
 function fuScenario(c){ return ({ first:'followup', second:'nudge', last:'after_no' })[fuStage(c)]; }
+// Increasing cadence: wait longer between each touch so you don't over-chase.
+// Base = the "dage" field; +3 before the 2nd follow-up, +6 before the last.
+function fuCadence(c){ const t = followupDays(); return ({ first:t, second:t+3, last:t+6 })[fuStage(c)]; }
+function dueIn(c){ return fuCadence(c) - daysSinceTouch(c); } // days until due (negative = overdue)
 // If the latest inbound was an auto-reply (out-of-office), surface why they're quiet.
 function autoReplyNote(c){
   const h = HISTORY[c.company];
@@ -105,8 +109,8 @@ function registerSend(company, isFu){
   return setRec(company, { status: statusAfterSend(company, isFu), date: today() }).then(render);
 }
 // Follow-up radar: days since the last mail + an urgency tier.
-function fuTier(days){
-  const t = followupDays();
+function fuTier(days, base){
+  const t = base || followupDays();
   if(days >= t * 2) return 'hot';   // way overdue
   if(days >= t)     return 'due';   // due now
   return '';
@@ -462,10 +466,11 @@ function followupHTML(){
   const waiting = DATA.contacts.filter(c=>fuWaiting(c)&&match(c));
   const val = c=>priceKr(c.placement);
   const sortDue = (a,b)=> (daysSinceTouch(b)-daysSinceTouch(a)) || (val(b)-val(a)); // most overdue, then most valuable
+  const t = followupDays();
   const groups = [
-    { key:'first',  icon:'🟢', title:'Klar til 1. opfølgning', hint:'Sendt én mail uden svar — send en blød, kort opfølgning.' },
-    { key:'second', icon:'🟡', title:'Klar til 2. opfølgning', hint:'Fulgt op én gang, stadig tavse — kom med en NY vinkel (fx Gothersgade-skærmen eller en anden placering).' },
-    { key:'last',   icon:'🔴', title:'Sidste forsøg', hint:'3+ mails uden svar — ét sidste let touch, ellers park dem (sæt “Nej tak”).' },
+    { key:'first',  icon:'🟢', title:'Klar til 1. opfølgning', hint:`Sendt én mail uden svar (${t}+ dage) — send en blød, kort opfølgning.` },
+    { key:'second', icon:'🟡', title:'Klar til 2. opfølgning', hint:`Fulgt op én gang, stadig tavse (${t+3}+ dage) — kom med en NY vinkel (fx Gothersgade-skærmen eller en anden placering).` },
+    { key:'last',   icon:'🔴', title:'Sidste forsøg', hint:`3+ mails uden svar (${t+6}+ dage) — ét sidste let touch, ellers park dem (sæt “Nej tak”).` },
   ];
   const total = due.length;
   let html = `<div class="fu-top">⏰ <b>${total}</b> klar til opfølgning nu${waiting.length?` · ${waiting.length} kommer i kø`:''}</div>`;
@@ -479,10 +484,10 @@ function followupHTML(){
   }
   if(!any) html += '<div class="fu-none">Ingen forfaldne opfølgninger lige nu 🎉</div>';
   if(waiting.length){
-    const soon = waiting.sort((a,b)=> (followupDays()-daysSinceTouch(a)) - (followupDays()-daysSinceTouch(b)));
+    const soon = waiting.sort((a,b)=> dueIn(a) - dueIn(b));
     html += `<div class="fu-group waiting"><div class="fu-gtitle">⏳ Kommer i kø <span class="fu-gcount">${waiting.length}</span></div>`+
-      `<div class="fu-ghint">Sendt, men endnu ikke forfaldne (under ${followupDays()} dage siden sidste mail).</div>`+
-      `<div class="fu-waitlist">${soon.slice(0,50).map(c=>{const left=Math.max(0,followupDays()-daysSinceTouch(c));return `<span class="fu-waitchip" title="${esc(c.company)} · ${touchCount(c)}. mail · ${daysSinceTouch(c)} dage siden">${esc(personOf(c.company,c)||c.company)} <b>${left}d</b></span>`;}).join('')}</div></div>`;
+      `<div class="fu-ghint">Sendt, men endnu ikke forfaldne efter cadencen — vises med dage til de er klar.</div>`+
+      `<div class="fu-waitlist">${soon.slice(0,50).map(c=>{const left=Math.max(0,dueIn(c));return `<span class="fu-waitchip" title="${esc(c.company)} · ${touchCount(c)}. mail · ${daysSinceTouch(c)} dage siden">${esc(personOf(c.company,c)||c.company)} <b>${left}d</b></span>`;}).join('')}</div></div>`;
   }
   return html;
 }
@@ -525,7 +530,7 @@ function cardHTML(c){
   const subject = isFu ? c.fuSubject : c.subject;
   const body = isFu ? c.fuBody : c.body;
   const fuDays = daysSinceTouch(c);
-  const fuT = isFu ? fuTier(fuDays) : '';
+  const fuT = isFu ? fuTier(fuDays, fuCadence(c)) : '';
   let badge;
   if(curTab === 'svar') badge = `<span class="badge reply">💬 ${esc(st)}${r.date?' · '+esc(r.date):''}</span>`;
   else if(isFu){
@@ -782,10 +787,11 @@ function renderBar(){
   }
   if(curTab === 'opfolg'){
     const due = DATA.contacts.filter(isDue);
-    const hot = due.filter(c=>fuTier(daysSince(rec(c.company).date))==='hot').length;
+    const hot = due.filter(c=>fuTier(daysSinceTouch(c), fuCadence(c))==='hot').length;
+    const t = followupDays();
     $('bar').innerHTML =
-      `<span><b>${due.length}</b> klar til opfølgning (≥ ${followupDays()} dage siden sidste mail, intet svar)</span>`+
-      (hot ? `<span class="bar-hot">🔴 <b>${hot}</b> for længe siden (≥ ${followupDays()*2} dage) — tag dem først</span>` : '');
+      `<span><b>${due.length}</b> klar til opfølgning · cadence ${t}/${t+3}/${t+6} dage (1./2./sidste touch)</span>`+
+      (hot ? `<span class="bar-hot">🔴 <b>${hot}</b> for længe siden — tag dem først</span>` : '');
     return;
   }
   const pool = DATA.contacts.filter(c=>c.temp===curTab);
