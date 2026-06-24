@@ -200,7 +200,6 @@ export default async function handler(req, res) {
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 2600,
-      temperature: 0.9, // more varied, less templated phrasing across the 3 drafts
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMsg }],
     });
