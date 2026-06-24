@@ -16,6 +16,7 @@ let PLACEMENT_IMAGES = new Set();   // placement names that have a mockup
 let MOCK_BUST = 0;                  // bumped after upload/delete to bust <img> cache
 let HAS_AI = false;
 let curTab = 'dash';
+let histMode = 'timeline';   // Historik view: 'timeline' (by time) | 'contacts' (per customer)
 
 const $ = (id) => document.getElementById(id);
 const el = (sel, root=document) => root.querySelector(sel);
@@ -491,6 +492,53 @@ function followupHTML(){
   }
   return html;
 }
+// Human day label for the timeline ("I dag" / "I går" / weekday / date).
+const DK_DAYS = ['søndag','mandag','tirsdag','onsdag','torsdag','fredag','lørdag'];
+function dayLabel(ts){
+  const d = new Date(ts);
+  const startOf = (x)=> new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((startOf(new Date()) - startOf(d)) / 86400000);
+  if(diff === 0) return 'I dag';
+  if(diff === 1) return 'I går';
+  if(diff > 1 && diff < 7) return DK_DAYS[d.getDay()];
+  return d.toLocaleDateString('da-DK', { day:'numeric', month:'short', year:'numeric' });
+}
+// Chronological feed across all customers: who received / replied, and when.
+function historyTimelineHTML(q){
+  const rows = [];
+  for(const [co, h] of Object.entries(HISTORY)){
+    if(!h || !h.events) continue;
+    const c = DATA.contacts.find(x=>x.company===co);
+    const person = personOf(co, c);
+    if(q && !((co+' '+person+' '+(h.placements||[]).join(' ')).toLowerCase().includes(q))) continue;
+    for(const e of h.events) if(e && e.ts) rows.push({ co, person, e });
+  }
+  if(!rows.length) return '<div class="histempty">Ingen aktivitet endnu — tryk “Synk Gmail”.</div>';
+  rows.sort((a,b)=> (b.e.ts||0) - (a.e.ts||0));
+  const cap = rows.slice(0, 300);
+  const sent = rows.filter(r=>r.e.dir==='out').length;
+  let html = `<div class="hist-sum">📅 ${sent} mails sendt · ${rows.length-sent} svar — nyeste først</div>`;
+  let curDay = null;
+  for(const { co, person, e } of cap){
+    const day = dayLabel(e.ts);
+    if(day !== curDay){ curDay = day; html += `<div class="tl-day">${esc(day)}</div>`; }
+    const out = e.dir === 'out';
+    const icon = out ? '📤' : (e.auto ? '🤖' : '📨');
+    const label = out ? 'Sendt til' : (e.auto ? 'Autosvar fra' : 'Svar fra');
+    const time = new Date(e.ts).toLocaleTimeString('da-DK', { hour:'2-digit', minute:'2-digit' });
+    const pl = out ? placementChips(e.placements) : '';
+    html += `<div class="tl-row ${out?'out':(e.auto?'auto':'in')}" data-company="${esc(co)}">
+      <span class="tl-ic">${icon}</span>
+      <div class="tl-main">
+        <div class="tl-top"><b>${esc(label)} ${esc(person||co)}</b>${person?` · ${esc(co)}`:''}<span class="tl-time">${time}</span></div>
+        ${e.subject?`<div class="tl-subj">${esc(e.subject)}</div>`:''}
+        ${pl?`<div class="tl-pl">${pl}</div>`:''}
+      </div>
+    </div>`;
+  }
+  if(rows.length > cap.length) html += `<div class="hist-more">+${rows.length-cap.length} ældre hændelser</div>`;
+  return html;
+}
 function bindHistRows(){
   document.querySelectorAll('.histtable tr[data-company]').forEach(tr=>{
     const company = tr.dataset.company;
@@ -608,10 +656,17 @@ function render(){
     return;
   }
   if(curTab === 'hist'){
-    $('list').innerHTML = historyTableHTML($('q').value.toLowerCase());
+    const hq = $('q').value.toLowerCase();
+    const toggle = `<div class="hist-modes">`+
+      `<button class="hist-mode ${histMode==='timeline'?'active':''}" data-hm="timeline">📅 Tidslinje</button>`+
+      `<button class="hist-mode ${histMode==='contacts'?'active':''}" data-hm="contacts">👤 Pr. kunde</button>`+
+      `</div>`;
+    $('list').innerHTML = toggle + (histMode==='timeline' ? historyTimelineHTML(hq) : historyTableHTML(hq));
     $('empty').style.display = 'none';
     renderCounts();
-    bindHistRows();
+    document.querySelectorAll('.hist-mode').forEach(b=>b.addEventListener('click', ()=>{ histMode = b.dataset.hm; render(); }));
+    if(histMode==='contacts') bindHistRows();
+    else document.querySelectorAll('.tl-row[data-company]').forEach(r=>r.addEventListener('click', ()=>openContact(r.dataset.company)));
     renderBar();
     return;
   }
