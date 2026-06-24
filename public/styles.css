@@ -279,6 +279,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--ink);margin:0;-web
 .iconbtn:hover{background:#e6eaf3}
 .tagcustom{display:inline-block;font-size:10px;font-weight:700;color:#1e50d6;background:#e7eefc;border:1px solid #d3e0fb;border-radius:6px;padding:1px 6px;width:fit-content}
 .badge.reply{background:var(--ok-bg);color:#136b41;border-color:#bfe6ce}
+.guesswhy{font-size:12px;color:#5a6580;background:#f6f4fb;border:1px solid #e7e0f4;border-radius:9px;padding:6px 10px;margin:2px 0 8px}
+.guesswhy b{color:#5b4ab7}
 
 /* ---------- modal ---------- */
 .modal{position:fixed;inset:0;background:rgba(16,26,48,.55);display:flex;align-items:center;justify-content:center;z-index:30;padding:18px}

@@ -507,8 +507,13 @@ function openContact(company){
   setTimeout(()=>{ const card=[...document.querySelectorAll('.card')].find(x=>x.dataset.company===company); if(card) card.scrollIntoView({behavior:'smooth',block:'center'}); }, 60);
 }
 function contactMetaHTML(c){
-  const bits = [c.person && esc(c.person), c.email && esc(c.email), c.phone && esc(c.phone)].filter(Boolean);
+  const who = [c.person && esc(c.person), c.title && esc(c.title)].filter(Boolean).join(', ');
+  const bits = [who, c.email && esc(c.email), c.phone && esc(c.phone)].filter(Boolean);
   return bits.length ? `<div class="cmeta">${bits.join(' · ')}</div>` : '';
+}
+function guessHTML(c){
+  if(!c.companyGuess) return '';
+  return `<div class="guesswhy">🔎 <b>Gæt:</b> ${esc(c.companyGuess)}</div>`;
 }
 const BUYER = { bureau:'🏢 Bureau', selv:'🤝 Selv', ukendt:'❓ Indkøb?' };
 const BUYER_CYCLE = { ukendt:'bureau', bureau:'selv', selv:'ukendt' };
@@ -560,6 +565,7 @@ function cardHTML(c){
       </div>
     </div>
     ${buyerReasonHTML(c)}
+    ${guessHTML(c)}
     ${(isFu && autoReplyNote(c)) ? `<div class="fu-auto">🤖 Autosvar sidst: <span>${esc(autoReplyNote(c))}</span></div>` : ''}
     ${scoreChips(c)}
     ${tagsHTML(c)}
@@ -982,6 +988,7 @@ function bindGlobal(){
   $('ftag').addEventListener('change', render);
   $('sort').addEventListener('change', render);
   $('btnScore').addEventListener('click', scoreContacts);
+  $('btnEnrich').addEventListener('click', enrichContacts);
   $('btnBrief').addEventListener('click', openBriefing);
   $('btnMockups').addEventListener('click', openMockups);
   $('mockupsClose').addEventListener('click', closeMockups);
@@ -1078,6 +1085,7 @@ function openContactModal(company){
   $('f-segment').value = c ? (c.segment||'') : '';
   $('f-tags').value    = c ? (c.tags||[]).join(', ') : '';
   $('f-person').value  = c ? (c.person||'')  : '';
+  $('f-title').value   = c ? (c.title||'')   : '';
   $('f-email').value   = c ? (c.email||'')   : '';
   $('f-phone').value   = c ? (c.phone||'')   : '';
   $('f-subject').value = c ? (c.subject||'') : '';
@@ -1094,7 +1102,7 @@ async function saveContact(){
   const prev = editingCompany ? DATA.contacts.find(x=>x.company===editingCompany) : null;
   const fields = {
     temp:$('f-temp').value, buyer:$('f-buyer').value, placement:$('f-placement').value, segment:$('f-segment').value,
-    person:$('f-person').value, email:$('f-email').value.trim(), phone:$('f-phone').value,
+    person:$('f-person').value, title:$('f-title').value, email:$('f-email').value.trim(), phone:$('f-phone').value,
     subject:$('f-subject').value, body:$('f-body').value, tags,
     moneyScore: moneyVal ? Number(moneyVal) : null,
   };
@@ -1160,6 +1168,22 @@ async function scoreContacts(){
     toast(`💰 Færdig: budget vurderet for ${j.scored} kunder. Sortér på 💰 Budget for at se de bedste.`, true);
   }catch(e){ toast('Netværksfejl.', false); }
   finally{ if($('btnScore')){ $('btnScore').disabled=false; $('btnScore').textContent='💰 Vurder budget'; } }
+}
+async function enrichContacts(){
+  if(!HAS_AI){ toast('AI er slået fra — tilføj ANTHROPIC_API_KEY.', false); return; }
+  if(!confirm('Berig kontakterne ud fra jeres mail-dialoger?\n\nClaude udtrækker FAKTA (navn, titel, direkte telefon og e-mail) fra kundernes egne signaturer/mails — og tilføjer et kort, tydeligt markeret GÆT om virksomheden. Eksisterende felter overskrives ikke.')) return;
+  const btn = $('btnEnrich'); if(btn){ btn.disabled=true; btn.textContent='🔎 Beriger…'; }
+  toast('🔎 Claude beriger kontakter ud fra dialogerne…', true);
+  try{
+    const res = await api('/api/contacts', { method:'POST', body: JSON.stringify({ action:'enrich' }) });
+    if(res.status===401){ showGate(); return; }
+    const j = await res.json();
+    if(!res.ok){ toast(j.message || 'Kunne ikke berige.', false); return; }
+    DATA.contacts = j.contacts; render();
+    const c = j.counts || {};
+    toast(`🔎 Færdig: udfyldt ${c.person||0} navne · ${c.title||0} titler · ${c.phone||0} tlf · ${c.email||0} e-mails (på ${c.contacts||0} kunder).`, true);
+  }catch(e){ toast('Netværksfejl.', false); }
+  finally{ if($('btnEnrich')){ $('btnEnrich').disabled=false; $('btnEnrich').textContent='🔎 Berig kontakter'; } }
 }
 
 /* ---------- daily briefing ---------- */

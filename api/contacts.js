@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '../lib/auth.js';
-import { addContact, updateContact, deleteContact, restoreContact, effectiveContacts, bulkSetBuyer, bulkSetMoney } from '../lib/contacts.js';
+import { addContact, updateContact, deleteContact, restoreContact, effectiveContacts, bulkSetBuyer, bulkSetMoney, bulkEnrich } from '../lib/contacts.js';
 import { loadLogs } from '../lib/log.js';
 
 const CLASSIFY_SYSTEM = `Du er medieindkøbs-ekspert i det danske/nordiske annoncemarked. For hver virksomhed skal du vurdere, hvordan de køber annonceplads (out-of-home/medier), OG give en kort begrundelse:
@@ -110,6 +110,85 @@ async function scoreMoneyAll() {
   return Object.keys(map).length;
 }
 
+const ENRICH_SYSTEM = `Du beriger kontaktdata for en dansk out-of-home-sælger. For hver virksomhed får du evt. en [DIALOG: ...] (kundens egne mails, ofte med signatur) og kendte felter.
+
+Udtræk KUN FAKTA der faktisk fremgår af dialogen/signaturen — opfind ALDRIG noget. Hvis et felt ikke fremgår, skriv "-".
+- name: kontaktpersonens fulde navn (fra signatur/afsender).
+- title: jobtitel/rolle (fx "Marketing Manager").
+- phone: direkte/mobil telefonnummer.
+- email: personens egen e-mail (helst ikke info@/kontakt@).
+- guess: ÉT kort GÆT om virksomheden (branche/størrelse/relevans for outdoor), max ~12 ord. Dette er ALTID et gæt, aldrig fakta.
+
+Returnér PRÆCIS én linje pr. virksomhed, intet andet, i dette format:
+<nummer> || name: <...> || title: <...> || phone: <...> || email: <...> || guess: <...>`;
+
+function enrichLine(c, idx, logs) {
+  const kunde = (logs[c.company] || [])
+    .filter((e) => e.who === 'kunde')
+    .map((e) => e.text)
+    .join(' | ')
+    .replace(/\s+/g, ' ')
+    .slice(0, 1100);
+  const known = [c.person && `navn=${c.person}`, c.title && `titel=${c.title}`, c.email && `email=${c.email}`, c.phone && `tlf=${c.phone}`]
+    .filter(Boolean).join(', ');
+  return `${idx + 1}. ${c.company}${known ? ` (kendt: ${known})` : ''}${kunde ? `  [DIALOG: ${kunde}]` : ''}`;
+}
+
+const val = (s) => { const t = (s || '').trim(); return !t || t === '-' ? '' : t.slice(0, 120); };
+
+async function enrichAll() {
+  const [contacts, logs] = await Promise.all([effectiveContacts(), loadLogs()]);
+  const client = new Anthropic();
+  const model = process.env.CLASSIFY_MODEL || 'claude-opus-4-8';
+
+  const CHUNK = 22;
+  const chunks = [];
+  for (let i = 0; i < contacts.length; i += CHUNK) chunks.push(contacts.slice(i, i + CHUNK));
+
+  const partials = await Promise.all(chunks.map(async (chunk) => {
+    const lines = chunk.map((c, j) => enrichLine(c, j, logs)).join('\n');
+    const msg = await client.messages.create({
+      model,
+      max_tokens: 4000,
+      system: [{ type: 'text', text: ENRICH_SYSTEM, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: lines }],
+    });
+    const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    const out = {};
+    for (const line of text.split(/\n/)) {
+      const m = line.match(/^\s*(\d+)\s*\|\|\s*(.+)$/);
+      if (!m) continue;
+      const c = chunk[Number(m[1]) - 1];
+      if (!c) continue;
+      const f = {};
+      for (const part of m[2].split('||')) {
+        const kv = part.match(/^\s*(name|title|phone|email|guess)\s*:\s*(.*)$/i);
+        if (kv) f[kv[1].toLowerCase()] = val(kv[2]);
+      }
+      const patch = {};
+      // Facts: fill ONLY where the contact has nothing yet (never clobber curated data).
+      if (f.name && !c.person) patch.person = f.name;
+      if (f.title && !c.title) patch.title = f.title;
+      if (f.phone && !c.phone) patch.phone = f.phone;
+      if (f.email && !c.email) patch.email = f.email;
+      if (f.guess) patch.companyGuess = f.guess; // always refresh the (marked) guess
+      if (Object.keys(patch).length) out[c.company] = patch;
+    }
+    return out;
+  }));
+
+  const map = Object.assign({}, ...partials);
+  const counts = { contacts: Object.keys(map).length, person: 0, title: 0, phone: 0, email: 0 };
+  for (const p of Object.values(map)) {
+    if (p.person) counts.person++;
+    if (p.title) counts.title++;
+    if (p.phone) counts.phone++;
+    if (p.email) counts.email++;
+  }
+  await bulkEnrich(map);
+  return counts;
+}
+
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return;
   if (req.method !== 'POST') {
@@ -130,6 +209,10 @@ export default async function handler(req, res) {
       if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_disabled', message: 'ANTHROPIC_API_KEY er ikke sat.' });
       const scored = await scoreMoneyAll();
       return res.status(200).json({ ok: true, contacts: await effectiveContacts(), scored });
+    } else if (action === 'enrich') {
+      if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ai_disabled', message: 'ANTHROPIC_API_KEY er ikke sat.' });
+      const counts = await enrichAll();
+      return res.status(200).json({ ok: true, contacts: await effectiveContacts(), counts });
     } else return res.status(400).json({ error: 'bad_action' });
     return res.status(200).json({ ok: true, contacts: await effectiveContacts() });
   } catch (err) {
