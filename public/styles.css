@@ -205,6 +205,22 @@ header p{margin:6px 0 0;font-size:12.5px;color:#bccbe6;max-width:680px}
 .ht-hot td:first-child{box-shadow:inset 3px 0 0 #e0a93b}
 .muted{color:#aab2c0}
 
+/* ---------- Opfølgning: grouped follow-up queue ---------- */
+.fu-top{font-size:14px;font-weight:600;color:#3a4256;margin:4px 2px 14px}
+.fu-top b{color:#e0892b;font-size:16px}
+.fu-group{margin:18px 2px 8px}
+.fu-group:first-of-type{margin-top:4px}
+.fu-gtitle{font-size:14.5px;font-weight:800;color:#1f2733;display:flex;align-items:center;gap:8px}
+.fu-gcount{font-size:12px;font-weight:700;color:#fff;background:#8a93a6;border-radius:999px;padding:1px 9px}
+.fu-ghint{font-size:12.5px;color:#6a7283;margin:3px 0 4px;line-height:1.45}
+.fu-none{padding:32px 16px;text-align:center;color:#23a96c;font-size:15px;font-weight:600}
+.fu-auto{font-size:12px;background:#f4f5f8;border:1px solid #e3e7ef;color:#6b7280;border-radius:9px;padding:6px 10px;margin:2px 0 8px}
+.fu-auto span{font-style:italic}
+.fu-group.waiting{margin-top:26px;border-top:1px dashed #dfe3ec;padding-top:16px}
+.fu-waitlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fu-waitchip{font-size:11.5px;color:#56607a;background:#f3f5f9;border:1px solid #e3e7ef;border-radius:999px;padding:3px 10px}
+.fu-waitchip b{color:#e0892b}
+
 /* ---------- responsive ---------- */
 @media(max-width:640px){
   .wrap{padding:0 14px}

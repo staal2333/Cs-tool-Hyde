@@ -50,11 +50,48 @@ function parseDate(s){
 function daysSince(s){ const d = parseDate(s); return d ? Math.floor((Date.now()-d)/86400000) : 0; }
 function followupDays(){ return parseInt($('thr').value) || DATA.followupDaysDefault || 5; }
 function isDue(c){
-  const r = rec(c.company);
-  return (r.status === 'Sendt' || r.status === 'Opfølgning sendt') && daysSince(r.date) >= followupDays();
+  const st = rec(c.company).status || 'Ikke kontaktet';
+  if(st !== 'Sendt' && st !== 'Opfølgning sendt') return false; // excludes replies, Booket, Nej tak
+  return daysSinceTouch(c) >= followupDays();
+}
+// Sent but not yet due — queued for an upcoming follow-up.
+function fuWaiting(c){
+  const st = rec(c.company).status || '';
+  return (st === 'Sendt' || st === 'Opfølgning sendt') && daysSinceTouch(c) < followupDays();
 }
 // How many mails we've sent this contact so far (from the Gmail history).
 function sentCountOf(company){ const h = HISTORY[company]; return (h && h.sentCount) || 0; }
+// Touch count = mails we've sent. Falls back to status when there's no Gmail history yet.
+function touchCount(c){
+  const n = sentCountOf(c.company);
+  if(n) return n;
+  const st = rec(c.company).status;
+  if(st === 'Opfølgning sendt') return 2;
+  if(st === 'Sendt') return 1;
+  return 0;
+}
+// Timestamp of the last mail WE sent (from history), else the stored status date.
+function lastTouchTs(c){
+  const h = HISTORY[c.company];
+  if(h && h.events){
+    const outs = h.events.filter(e=>e.dir==='out');
+    if(outs.length) return outs[outs.length-1].ts;
+  }
+  const d = parseDate(rec(c.company).date);
+  return d ? d.getTime() : 0;
+}
+function daysSinceTouch(c){ const ts = lastTouchTs(c); return ts ? Math.floor((Date.now()-ts)/86400000) : 0; }
+// Follow-up stage drives both grouping and the recommended mail scenario.
+function fuStage(c){ const n = touchCount(c); return n>=3 ? 'last' : (n===2 ? 'second' : 'first'); }
+function fuScenario(c){ return ({ first:'followup', second:'nudge', last:'after_no' })[fuStage(c)]; }
+// If the latest inbound was an auto-reply (out-of-office), surface why they're quiet.
+function autoReplyNote(c){
+  const h = HISTORY[c.company];
+  if(!h || !h.events) return '';
+  const ins = h.events.filter(e=>e.dir==='in');
+  const last = ins[ins.length-1];
+  return (last && last.auto) ? (last.snippet||'').slice(0,90) : '';
+}
 // The status a contact should land on right after you send them a mail.
 // A 2nd+ mail (or sending from the follow-up tab) is a follow-up; the first is "Sendt".
 function statusAfterSend(company, isFu){
@@ -220,7 +257,7 @@ function defaultScenario(c){
   return c.temp==='varm' ? 'followup' : 'open';
 }
 function draftPanelHTML(c){
-  const def = defaultScenario(c);
+  const def = curTab === 'opfolg' ? fuScenario(c) : defaultScenario(c);
   const scen = SCEN.map(([v,l])=>`<option value="${v}" ${v===def?'selected':''}>${l}</option>`).join('');
   const plac = Object.keys(DATA.placements||{}).map(p=>`<option ${p===c.placement?'selected':''}>${esc(p)}</option>`).join('');
   return `<div class="draftbox">
@@ -409,6 +446,46 @@ function historyTableHTML(q){
       <tbody>${rows.map(row).join('')}</tbody>
     </table></div>`;
 }
+/* ---------- Opfølgning: touch-based, Gmail-synced follow-up queue ---------- */
+function followupHTML(){
+  const q = $('q').value.toLowerCase();
+  const f = $('fil').value;
+  const fb = ($('fbuyer')&&$('fbuyer').value)||'';
+  const fa = ($('farea')&&$('farea').value)||'';
+  const ft = ($('ftag')&&$('ftag').value)||'';
+  const match = c=>{
+    const hay = (c.company+' '+(c.person||'')+' '+(c.email||'')+' '+areaOf(c)+' '+(c.tags||[]).join(' ')).toLowerCase();
+    const st = rec(c.company).status||'';
+    return hay.includes(q) && (!f||st===f) && (!fb||buyerVal(c)===fb) && (!fa||areaOf(c)===fa) && (!ft||(c.tags||[]).includes(ft));
+  };
+  const due = DATA.contacts.filter(c=>isDue(c)&&match(c));
+  const waiting = DATA.contacts.filter(c=>fuWaiting(c)&&match(c));
+  const val = c=>priceKr(c.placement);
+  const sortDue = (a,b)=> (daysSinceTouch(b)-daysSinceTouch(a)) || (val(b)-val(a)); // most overdue, then most valuable
+  const groups = [
+    { key:'first',  icon:'🟢', title:'Klar til 1. opfølgning', hint:'Sendt én mail uden svar — send en blød, kort opfølgning.' },
+    { key:'second', icon:'🟡', title:'Klar til 2. opfølgning', hint:'Fulgt op én gang, stadig tavse — kom med en NY vinkel (fx Gothersgade-skærmen eller en anden placering).' },
+    { key:'last',   icon:'🔴', title:'Sidste forsøg', hint:'3+ mails uden svar — ét sidste let touch, ellers park dem (sæt “Nej tak”).' },
+  ];
+  const total = due.length;
+  let html = `<div class="fu-top">⏰ <b>${total}</b> klar til opfølgning nu${waiting.length?` · ${waiting.length} kommer i kø`:''}</div>`;
+  let any = false;
+  for(const g of groups){
+    const list = due.filter(c=>fuStage(c)===g.key).sort(sortDue);
+    if(!list.length) continue;
+    any = true;
+    html += `<div class="fu-group"><div class="fu-gtitle">${g.icon} ${g.title} <span class="fu-gcount">${list.length}</span></div><div class="fu-ghint">${g.hint}</div></div>`;
+    html += list.map(cardHTML).join('');
+  }
+  if(!any) html += '<div class="fu-none">Ingen forfaldne opfølgninger lige nu 🎉</div>';
+  if(waiting.length){
+    const soon = waiting.sort((a,b)=> (followupDays()-daysSinceTouch(a)) - (followupDays()-daysSinceTouch(b)));
+    html += `<div class="fu-group waiting"><div class="fu-gtitle">⏳ Kommer i kø <span class="fu-gcount">${waiting.length}</span></div>`+
+      `<div class="fu-ghint">Sendt, men endnu ikke forfaldne (under ${followupDays()} dage siden sidste mail).</div>`+
+      `<div class="fu-waitlist">${soon.slice(0,50).map(c=>{const left=Math.max(0,followupDays()-daysSinceTouch(c));return `<span class="fu-waitchip" title="${esc(c.company)} · ${touchCount(c)}. mail · ${daysSinceTouch(c)} dage siden">${esc(personOf(c.company,c)||c.company)} <b>${left}d</b></span>`;}).join('')}</div></div>`;
+  }
+  return html;
+}
 function bindHistRows(){
   document.querySelectorAll('.histtable tr[data-company]').forEach(tr=>{
     const company = tr.dataset.company;
@@ -447,14 +524,15 @@ function cardHTML(c){
   const openPanel = isFu || curTab === 'svar';
   const subject = isFu ? c.fuSubject : c.subject;
   const body = isFu ? c.fuBody : c.body;
-  const fuDays = daysSince(r.date);
+  const fuDays = daysSinceTouch(c);
   const fuT = isFu ? fuTier(fuDays) : '';
   let badge;
   if(curTab === 'svar') badge = `<span class="badge reply">💬 ${esc(st)}${r.date?' · '+esc(r.date):''}</span>`;
   else if(isFu){
     const flag = fuT === 'hot' ? '🔴' : '🟠';
-    const ctx = st === 'Opfølgning sendt' ? 'opfulgt' : 'sendt';
-    badge = `<span class="badge due ${fuT}">${flag} ${ctx} for ${fuDays} dage siden</span>`;
+    const n = touchCount(c);
+    const ord = n>=2 ? `${n}. mail` : '1. mail';
+    badge = `<span class="badge due ${fuT}">${flag} ${ord} · ${fuDays} dage siden</span>`;
   }
   else badge = `<span class="badge">${esc(c.segment||'')}${c.placement ? ' · '+esc(c.placement) : ''}</span>`;
   const opts = STATUSES.map(s => `<option ${s===st?'selected':''}>${s}</option>`).join('');
@@ -477,6 +555,7 @@ function cardHTML(c){
       </div>
     </div>
     ${buyerReasonHTML(c)}
+    ${(isFu && autoReplyNote(c)) ? `<div class="fu-auto">🤖 Autosvar sidst: <span>${esc(autoReplyNote(c))}</span></div>` : ''}
     ${scoreChips(c)}
     ${tagsHTML(c)}
     ${subject ? `<div class="subrow"><span class="sublbl">Emne</span><span class="subtxt subj">${esc(subject)}</span>
@@ -519,6 +598,14 @@ function render(){
     $('empty').style.display = 'none';
     renderCounts();
     bindHistRows();
+    renderBar();
+    return;
+  }
+  if(curTab === 'opfolg'){
+    populateFilters();
+    $('list').innerHTML = followupHTML();
+    $('empty').style.display = 'none';
+    bindCards();
     renderBar();
     return;
   }
