@@ -583,7 +583,9 @@ function cardHTML(c){
     <div class="draftwrap" style="display:none">${draftPanelHTML(c)}</div>
   </div>`;
 }
+const VIEW_TITLES = { dash:'Overblik', kold:'Kolde leads', varm:'Varme leads', opfolg:'Opfølgning', svar:'Svar fra kunder', hist:'Historik', kort:'Placeringskort' };
 function render(){
+  const vt = $('viewTitle'); if(vt) vt.textContent = VIEW_TITLES[curTab] || '';
   const isDash = curTab === 'dash';
   const isMap = curTab === 'kort';
   const ctrls = document.querySelector('.controls');

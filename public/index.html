@@ -27,74 +27,77 @@
   </div>
 
   <!-- App -->
-  <div id="app" style="display:none">
-    <header>
-      <div class="wrap">
-        <h1>Hyde Media — Outreach</h1>
-        <p>Kopiér → indsæt i Gmail. Status gemmes nu i skyen og deles på tværs af dine enheder. Opfølgninger dukker op efter X dage.</p>
-        <div class="hbtns">
-          <button class="hbtn hbtn-sun" id="btnBrief">☀️ Dagens plan</button>
-          <button class="hbtn hbtn-primary" id="btnAdd">➕ Tilføj kunde</button>
-          <button class="hbtn" id="btnClassify">🏷️ Auto-tag indkøb</button>
-          <button class="hbtn" id="btnScore">💰 Vurder budget</button>
-          <button class="hbtn" id="btnMockups">🖼️ Mockups</button>
-          <button class="hbtn" id="btnExport">📥 Eksportér status (CSV)</button>
-          <button class="hbtn" id="btnSummary">📋 Kopiér opsummering</button>
-          <label>Opfølgning efter <input id="thr" type="number" value="5" min="1"> dage</label>
-          <button class="hbtn" id="btnReset">↺ Nulstil</button>
-          <button class="hbtn" id="btnLogout">Log ud</button>
-          <span id="gmailbox" class="gmailbox"></span>
+  <div id="app" class="shell" style="display:none">
+    <aside class="sidebar">
+      <div class="brandmark"><span class="logo">◆</span><div><b>Hyde Media</b><small>OUTREACH</small></div></div>
+      <nav class="nav tabs">
+        <button class="tab active" data-tab="dash"><span class="nav-ic">📊</span> Overblik</button>
+        <button class="tab" data-tab="kold"><span class="nav-ic">🔵</span> Kolde <span class="tabcount" id="c-kold"></span></button>
+        <button class="tab" data-tab="varm"><span class="nav-ic">🔥</span> Varme <span class="tabcount" id="c-varm"></span></button>
+        <button class="tab" data-tab="opfolg"><span class="nav-ic">⏰</span> Opfølgning <span class="tabcount" id="c-opfolg"></span></button>
+        <button class="tab" data-tab="svar"><span class="nav-ic">💬</span> Svar <span class="tabcount" id="c-svar"></span></button>
+        <button class="tab" data-tab="hist"><span class="nav-ic">📜</span> Historik <span class="tabcount" id="c-hist"></span></button>
+        <button class="tab" data-tab="kort"><span class="nav-ic">🗺️</span> Kort</button>
+      </nav>
+      <div class="side-section">
+        <div class="side-label">Værktøjer</div>
+        <button class="hbtn hbtn-sun" id="btnBrief">☀️ Dagens plan</button>
+        <button class="hbtn hbtn-primary" id="btnAdd">➕ Tilføj kunde</button>
+        <button class="hbtn" id="btnClassify">🏷️ Auto-tag indkøb</button>
+        <button class="hbtn" id="btnScore">💰 Vurder budget</button>
+        <button class="hbtn" id="btnMockups">🖼️ Mockups</button>
+        <button class="hbtn" id="btnExport">📥 Eksportér CSV</button>
+        <button class="hbtn" id="btnSummary">📋 Opsummering</button>
+        <button class="hbtn" id="btnReset">↺ Nulstil status</button>
+      </div>
+      <div class="side-foot">
+        <label class="thrlab">Opfølgning efter <input id="thr" type="number" value="5" min="1"> dage</label>
+        <span id="gmailbox" class="gmailbox"></span>
+        <button class="hbtn" id="btnLogout">⎋ Log ud</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h2 id="viewTitle">Overblik</h2>
+        <div class="controls">
+          <input id="q" placeholder="Søg kunde, person, emne…">
+          <select id="fil">
+            <option value="">Vis alle</option>
+            <option value="Ikke kontaktet">Kun ikke-sendt</option>
+            <option value="Sendt">Kun sendt</option>
+            <option value="Opfølgning sendt">Kun opfulgt</option>
+            <option value="Svar modtaget">Kun svar</option>
+            <option value="Booket">Kun booket</option>
+            <option value="Nej tak">Kun nej tak</option>
+          </select>
+          <select id="fbuyer">
+            <option value="">Alt medieindkøb</option>
+            <option value="bureau">🏢 Kun bureau</option>
+            <option value="selv">🤝 Kun selv</option>
+            <option value="ukendt">❓ Kun ukendt</option>
+          </select>
+          <select id="farea"><option value="">📍 Alle områder</option></select>
+          <select id="ftag" style="display:none"><option value="">🏷️ Alle tags</option></select>
+          <select id="sort">
+            <option value="">↕️ Standard rækkefølge</option>
+            <option value="booking">📅 Booking høj→lav</option>
+            <option value="money">💰 Budget høj→lav</option>
+          </select>
         </div>
+      </div>
+
+      <div class="main-inner">
         <div id="synctoast" class="synctoast" style="display:none"></div>
+        <div class="bar" id="bar"></div>
+        <div id="list"></div>
+        <div id="mapview" style="display:none">
+          <div class="maphint">De ledige placeringer. Klik en markør for detaljer. Positioner er omtrentlige.</div>
+          <div id="map"></div>
+        </div>
+        <div id="empty" class="empty" style="display:none"></div>
       </div>
-    </header>
-
-    <div class="wrap">
-      <div class="tabs">
-        <button class="tab active" data-tab="dash">📊 Overblik</button>
-        <button class="tab" data-tab="kold">🔵 Kolde <span class="tabcount" id="c-kold"></span></button>
-        <button class="tab" data-tab="varm">🔥 Varme <span class="tabcount" id="c-varm"></span></button>
-        <button class="tab" data-tab="opfolg">⏰ Opfølgning <span class="tabcount" id="c-opfolg"></span></button>
-        <button class="tab" data-tab="svar">💬 Svar <span class="tabcount" id="c-svar"></span></button>
-        <button class="tab" data-tab="hist">📜 Historik <span class="tabcount" id="c-hist"></span></button>
-        <button class="tab" data-tab="kort">🗺️ Kort</button>
-      </div>
-
-      <div class="bar" id="bar"></div>
-
-      <div class="controls">
-        <input id="q" placeholder="Søg kunde, emne eller type…">
-        <select id="fil">
-          <option value="">Vis alle</option>
-          <option value="Ikke kontaktet">Kun ikke-sendt</option>
-          <option value="Sendt">Kun sendt</option>
-          <option value="Opfølgning sendt">Kun opfulgt</option>
-          <option value="Svar modtaget">Kun svar</option>
-          <option value="Booket">Kun booket</option>
-          <option value="Nej tak">Kun nej tak</option>
-        </select>
-        <select id="fbuyer">
-          <option value="">Alt medieindkøb</option>
-          <option value="bureau">🏢 Kun bureau</option>
-          <option value="selv">🤝 Kun selv</option>
-          <option value="ukendt">❓ Kun ukendt</option>
-        </select>
-        <select id="farea"><option value="">📍 Alle områder</option></select>
-        <select id="ftag" style="display:none"><option value="">🏷️ Alle tags</option></select>
-        <select id="sort">
-          <option value="">↕️ Standard rækkefølge</option>
-          <option value="booking">📅 Booking høj→lav</option>
-          <option value="money">💰 Budget høj→lav</option>
-        </select>
-      </div>
-
-      <div id="list"></div>
-      <div id="mapview" style="display:none">
-        <div class="maphint">De 6 ledige placeringer. Klik en markør for detaljer. Positioner er omtrentlige.</div>
-        <div id="map"></div>
-      </div>
-      <div id="empty" class="empty" style="display:none"></div>
-    </div>
+    </main>
   </div>
 
   <!-- Add / edit contact modal -->
