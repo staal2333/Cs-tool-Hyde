@@ -3,6 +3,40 @@ import { requireAuth } from '../lib/auth.js';
 import { DATA } from '../lib/data.js';
 import { contactByCompany } from '../lib/contacts.js';
 import { loadTone, loadLogs } from '../lib/log.js';
+import { loadHistory } from '../lib/sync.js';
+import { getAccessToken } from '../lib/google.js';
+import { getThread } from '../lib/gmail.js';
+
+// Sebastian's own address(es) — used to label who wrote each message in a thread.
+const SELF_DOMAIN = /hydemedia\.dk/i;
+
+// Strip quoted history / signatures-of-prior-mails so each turn reads cleanly.
+function cleanMail(t) {
+  if (!t) return '';
+  const out = [];
+  for (const ln of String(t).split('\n')) {
+    if (/^\s*>/.test(ln)) break;
+    if (/^\s*(On .+wrote:|Den .+skrev:|Fra:\s|From:\s|-{3,}\s*Original|Sendt fra min|Get Outlook)/i.test(ln)) break;
+    out.push(ln);
+  }
+  return out.join('\n').trim();
+}
+
+// Pull the real Gmail thread into a clean transcript the model can reply to.
+async function threadTranscript(threadId) {
+  if (!threadId) return null;
+  let token;
+  try { token = await getAccessToken(); } catch { return null; }
+  let msgs;
+  try { msgs = await getThread(token, threadId); } catch { return null; }
+  const turns = [];
+  for (const m of msgs) {
+    const who = SELF_DOMAIN.test(m.headers.from || '') ? 'Sebastian' : 'Kunde';
+    const text = cleanMail(m.body || m.snippet);
+    if (text) turns.push({ who, text: text.slice(0, 2000) });
+  }
+  return turns.length ? turns : null;
+}
 
 const MODEL = process.env.CLAUDE_MODEL || 'claude-opus-4-8';
 
@@ -147,13 +181,19 @@ export default async function handler(req, res) {
       : `Den er ${pl.sqm} m², ${imprFmt(pl.impr)} eksponeringer om ugen, og hele juli koster ${price} — prisen for kun 2 uger.`;
   }
 
-  const [tone, logs] = await Promise.all([loadTone(), loadLogs()]);
+  const [tone, logs, history] = await Promise.all([loadTone(), loadLogs(), loadHistory()]);
   const toneExamples = tone.slice(-6).map((e, i) => `${i + 1}. ${e.text}`).join('\n\n');
-  const entries = logs[contact.company] || [];
-  const dialogue = entries
-    .map((e) => `${e.who === 'kunde' ? 'Kunde' : 'Sebastian'}: ${e.text}`)
-    .join('\n');
-  const lastKunde = [...entries].reverse().find((e) => e.who === 'kunde');
+
+  // Prefer the REAL Gmail thread (full back-and-forth) over the partial log, so a
+  // reply is grounded in the actual conversation — including mails sent in Gmail.
+  let turns = (logs[contact.company] || []).map((e) => ({ who: e.who === 'kunde' ? 'Kunde' : 'Sebastian', text: e.text }));
+  if (isReply) {
+    const threadId = history[contact.company]?.threadId;
+    const fromThread = await threadTranscript(threadId);
+    if (fromThread && fromThread.length) turns = fromThread; // the full thread wins
+  }
+  const dialogue = turns.map((e) => `${e.who}: ${e.text}`).join('\n');
+  const lastKunde = [...turns].reverse().find((e) => e.who === 'Kunde');
 
   // When replying, override the outreach template entirely: answer the mail.
   let replyBrief = null;
